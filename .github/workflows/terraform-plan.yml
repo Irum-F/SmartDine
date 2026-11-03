@@ -1,0 +1,65 @@
+name: Terraform Plan
+
+on:
+  pull_request:
+    paths: ["infra/**"]
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # for OIDC login to AWS
+  contents: read
+
+concurrency: terraform-prod   # never run two Terraform jobs against the same state at once
+
+defaults:
+  run:
+    working-directory: infra/envs/prod
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ vars.TF_VERSION }}
+
+      - name: Format check
+        run: terraform fmt -check -recursive ../..
+
+      - uses: terraform-linters/setup-tflint@v4
+
+      - name: TFLint
+        working-directory: infra
+        run: |
+          tflint --init
+          tflint --recursive
+
+      - name: Checkov security scan
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: infra
+          framework: terraform
+          soft_fail: true   # report findings without failing
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Init
+        run: terraform init -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+
+      - name: Validate
+        run: terraform validate
+
+      - name: Plan
+        run: terraform plan -no-color -out=tfplan | tee plan.txt
+
+      - name: Add plan to job summary
+        run: |
+          echo '### Terraform plan' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -n 60 plan.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

@@ -9,8 +9,8 @@ provider "aws" {
   region = var.region
 }
 
-variable "region"      { default = "ap-south-1" }
-variable "project"     { default = "smartdine" }
+variable "region" { default = "ap-south-1" }
+variable "project" { default = "smartdine" }
 variable "github_repo" { description = "GitHub repo in owner/name form, e.g. Irum-F/smartdine" }
 
 data "aws_caller_identity" "me" {}
@@ -63,8 +63,8 @@ resource "aws_ecr_lifecycle_policy" "app" {
 
 # GitHub Actions login to AWS via OIDC (no stored AWS keys)
 resource "aws_iam_openid_connect_provider" "github" {
-  url            = "https://token.actions.githubusercontent.com"
-  client_id_list = ["sts.amazonaws.com"]
+  url             = "https://token.actions.githubusercontent.com"
+  client_id_list  = ["sts.amazonaws.com"]
   thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
 }
 
@@ -90,6 +90,6 @@ resource "aws_iam_role_policy_attachment" "github_admin" {
   policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
 }
 
-output "state_bucket"      { value = aws_s3_bucket.state.bucket }
-output "github_role_arn"   { value = aws_iam_role.github_actions.arn }
-output "ecr_repositories"  { value = { for k, r in aws_ecr_repository.app : k => r.repository_url } }
+output "state_bucket" { value = aws_s3_bucket.state.bucket }
+output "github_role_arn" { value = aws_iam_role.github_actions.arn }
+output "ecr_repositories" { value = { for k, r in aws_ecr_repository.app : k => r.repository_url } }

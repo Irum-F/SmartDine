@@ -1,0 +1,60 @@
+name: App Build
+
+on:
+  push:
+    branches: [main]
+    paths: ["app/**"]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [frontend, api, notifier]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Skip services that don't exist yet
+        id: check
+        run: |
+          if [ -f "app/${{ matrix.service }}/Dockerfile" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.check.outputs.exists == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - if: steps.check.outputs.exists == 'true'
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build image
+        if: steps.check.outputs.exists == 'true'
+        run: |
+          IMAGE="${{ steps.ecr.outputs.registry }}/smartdine-${{ matrix.service }}:${{ github.sha }}"
+          docker build -t "$IMAGE" "app/${{ matrix.service }}"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Scan image for vulnerabilities
+        if: steps.check.outputs.exists == 'true'
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.IMAGE }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"   # block the push if fixable critical issues exist
+
+      - name: Push to ECR
+        if: steps.check.outputs.exists == 'true'
+        run: docker push "$IMAGE"
