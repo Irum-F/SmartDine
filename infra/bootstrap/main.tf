@@ -11,7 +11,10 @@ provider "aws" {
 
 variable "region" { default = "ap-south-1" }
 variable "project" { default = "smartdine" }
-variable "github_repo" { description = "GitHub repo in owner/name form, e.g. Irum-F/smartdine" }
+variable "github_repo" { 
+  description = "GitHub repo in owner/name form"
+  default     = "Irum-F/SmartDine"
+}
 
 data "aws_caller_identity" "me" {}
 
