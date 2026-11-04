@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -48,12 +48,12 @@ jobs:
 
       - name: Scan image for vulnerabilities
         if: steps.check.outputs.exists == 'true'
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # Trivy version 0.35.0
         with:
           image-ref: ${{ env.IMAGE }}
           severity: CRITICAL,HIGH
           ignore-unfixed: true
-          exit-code: "1"   # block the push if fixable critical issues exist
+          exit-code: "1" # block the push if fixable critical issues exist
 
       - name: Push to ECR
         if: steps.check.outputs.exists == 'true'

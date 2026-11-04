@@ -18,7 +18,7 @@ defaults:
 
 jobs:
   apply:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: production   # pauses for approval
     steps:
       - uses: actions/checkout@v4
