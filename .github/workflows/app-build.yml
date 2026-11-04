@@ -3,7 +3,9 @@ name: App Build
 on:
   push:
     branches: [main]
-    paths: ["app/**"]
+    paths:
+      - "app/**"
+      - ".github/workflows/app-build.yml"
   workflow_dispatch:
 
 permissions:
