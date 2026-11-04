@@ -1,3 +1,5 @@
+# SmartDine production environment
+
 terraform {
   required_version = ">= 1.10"
   required_providers {
@@ -7,6 +9,21 @@ terraform {
 
 provider "aws" {
   region = var.region
+}
+
+variable "github_owner_id" {
+  description = "Numeric GitHub account ID"
+  default     = "297141229"
+}
+
+variable "github_repo_id" {
+  description = "Numeric GitHub repository ID"
+  default     = "1440567584"
+}
+
+locals {
+  gh_owner = split("/", var.github_repo)[0]
+  gh_repo  = split("/", var.github_repo)[1]
 }
 
 variable "region" { default = "ap-south-1" }
@@ -81,7 +98,12 @@ resource "aws_iam_role" "github_actions" {
       Action    = "sts:AssumeRoleWithWebIdentity"
       Condition = {
         StringEquals = { "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com" }
-        StringLike   = { "token.actions.githubusercontent.com:sub" = "repo:${var.github_repo}:*" }
+        StringLike = {
+          "token.actions.githubusercontent.com:sub" = [
+            "repo:${local.gh_owner}@${var.github_owner_id}/${local.gh_repo}@${var.github_repo_id}:*",
+            "repo:${var.github_repo}:*",
+          ]
+        }
       }
     }]
   })
