@@ -5,10 +5,10 @@ data "aws_route53_zone" "main" {
 
 module "vpc" {
   nat_eip_allocation_id = data.aws_eip.nat.id
-  source   = "../../modules/vpc"
-  name     = var.project
-  cidr     = "10.20.0.0/16"
-  az_count = 2
+  source                = "../../modules/vpc"
+  name                  = var.project
+  cidr                  = "10.20.0.0/16"
+  az_count              = 2
 }
 
 module "acm" {
@@ -58,7 +58,7 @@ module "frontend" {
   listener_arn          = module.alb.https_listener_arn
   listener_priority     = 100
   path_patterns         = ["/*"]
-  execution_role_name = module.ecs_cluster.execution_role_name
+  execution_role_name   = module.ecs_cluster.execution_role_name
 }
 
 data "aws_eip" "nat" {

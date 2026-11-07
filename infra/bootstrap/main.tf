@@ -28,7 +28,7 @@ locals {
 
 variable "region" { default = "ap-south-1" }
 variable "project" { default = "smartdine" }
-variable "github_repo" { 
+variable "github_repo" {
   description = "GitHub repo in owner/name form"
   default     = "Irum-F/SmartDine"
 }
@@ -38,6 +38,9 @@ data "aws_caller_identity" "me" {}
 # Remote state bucket
 resource "aws_s3_bucket" "state" {
   bucket = "${var.project}-tfstate-${data.aws_caller_identity.me.account_id}"
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_s3_bucket_versioning" "state" {
@@ -66,6 +69,9 @@ resource "aws_ecr_repository" "app" {
   name                 = "${var.project}-${each.key}"
   image_tag_mutability = "IMMUTABLE"
   image_scanning_configuration { scan_on_push = true }
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_ecr_lifecycle_policy" "app" {
@@ -86,10 +92,16 @@ resource "aws_iam_openid_connect_provider" "github" {
   url             = "https://token.actions.githubusercontent.com"
   client_id_list  = ["sts.amazonaws.com"]
   thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_iam_role" "github_actions" {
   name = "${var.project}-github-actions"
+  lifecycle {
+    prevent_destroy = true
+  }
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -123,12 +135,18 @@ output "ecr_repositories" { value = { for k, r in aws_ecr_repository.app : k => 
 resource "aws_eip" "nat" {
   domain = "vpc"
   tags   = { Name = "${var.project}-nat-eip" }
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # The secret's container only; its value is set by hand, never in Terraform
 resource "aws_secretsmanager_secret" "mongodb_uri" {
   name        = "${var.project}/mongodb-uri"
   description = "MongoDB Atlas connection string for the SmartDine API"
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # The image version each service should run. The App Build pipeline updates it.
@@ -139,9 +157,10 @@ resource "aws_ssm_parameter" "image_tag" {
   value    = "none"
 
   lifecycle {
-    ignore_changes = [value] # the pipeline owns the value after creation
+    ignore_changes  = [value] # the pipeline owns the value after creation
+    prevent_destroy = true
   }
 }
 
-output "nat_public_ip"      { value = aws_eip.nat.public_ip }
+output "nat_public_ip" { value = aws_eip.nat.public_ip }
 output "mongodb_secret_arn" { value = aws_secretsmanager_secret.mongodb_uri.arn }
