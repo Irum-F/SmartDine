@@ -90,6 +90,7 @@ resource "aws_ecs_task_definition" "this" {
     essential    = true
     portMappings = [{ containerPort = var.container_port, protocol = "tcp" }]
     environment  = [for k, v in var.environment : { name = k, value = v }]
+    secrets     = [for k, v in var.secrets : { name = k, valueFrom = v }]
     logConfiguration = {
       logDriver = "awslogs"
       options = {
@@ -128,4 +129,18 @@ resource "aws_ecs_service" "this" {
 
   health_check_grace_period_seconds = 30
   depends_on                        = [aws_lb_listener_rule.this]
+}
+
+resource "aws_iam_role_policy" "read_secrets" {
+  count = length(var.secrets) > 0 ? 1 : 0
+  name  = "${var.name}-read-secrets"
+  role  = var.execution_role_name
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["secretsmanager:GetSecretValue"]
+      Resource = values(var.secrets)
+    }]
+  })
 }

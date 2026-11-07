@@ -4,6 +4,7 @@ data "aws_route53_zone" "main" {
 }
 
 module "vpc" {
+  nat_eip_allocation_id = data.aws_eip.nat.id
   source   = "../../modules/vpc"
   name     = var.project
   cidr     = "10.20.0.0/16"
@@ -57,4 +58,48 @@ module "frontend" {
   listener_arn          = module.alb.https_listener_arn
   listener_priority     = 100
   path_patterns         = ["/*"]
+  execution_role_name = module.ecs_cluster.execution_role_name
+}
+
+data "aws_eip" "nat" {
+  tags = { Name = "${var.project}-nat-eip" }
+}
+
+data "aws_ecr_repository" "api" {
+  name = "${var.project}-api"
+}
+
+data "aws_ssm_parameter" "api_image_tag" {
+  name = "/${var.project}/api/image-tag"
+}
+
+data "aws_secretsmanager_secret" "mongodb_uri" {
+  name = "${var.project}/mongodb-uri"
+}
+
+module "api" {
+  source                = "../../modules/ecs-service"
+  name                  = "${var.project}-api"
+  region                = var.region
+  cluster_id            = module.ecs_cluster.cluster_id
+  execution_role_arn    = module.ecs_cluster.execution_role_arn
+  execution_role_name   = module.ecs_cluster.execution_role_name
+  image                 = "${data.aws_ecr_repository.api.repository_url}:${nonsensitive(data.aws_ssm_parameter.api_image_tag.value)}"
+  container_port        = 4000
+  vpc_id                = module.vpc.vpc_id
+  private_subnet_ids    = module.vpc.private_subnet_ids
+  alb_security_group_id = module.alb.security_group_id
+  listener_arn          = module.alb.https_listener_arn
+  listener_priority     = 10
+  path_patterns         = ["/api/*", "/socket.io/*"]
+  health_check_path     = "/api/health"
+
+  environment = {
+    NODE_ENV = "production"
+    PORT     = "4000"
+  }
+
+  secrets = {
+    MONGODB_URI = data.aws_secretsmanager_secret.mongodb_uri.arn
+  }
 }

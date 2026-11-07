@@ -22,3 +22,11 @@ variable "environment" {
   default     = {}
   description = "Non-secret environment variables"
 }
+
+variable "execution_role_name" { type = string }
+
+variable "secrets" {
+  type        = map(string)
+  default     = {}
+  description = "Environment variable name => Secrets Manager secret ARN"
+}

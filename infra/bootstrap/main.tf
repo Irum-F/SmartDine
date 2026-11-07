@@ -118,3 +118,30 @@ resource "aws_iam_role_policy_attachment" "github_admin" {
 output "state_bucket" { value = aws_s3_bucket.state.bucket }
 output "github_role_arn" { value = aws_iam_role.github_actions.arn }
 output "ecr_repositories" { value = { for k, r in aws_ecr_repository.app : k => r.repository_url } }
+
+# Static NAT IP, kept across destroys so MongoDB Atlas can allow it
+resource "aws_eip" "nat" {
+  domain = "vpc"
+  tags   = { Name = "${var.project}-nat-eip" }
+}
+
+# The secret's container only; its value is set by hand, never in Terraform
+resource "aws_secretsmanager_secret" "mongodb_uri" {
+  name        = "${var.project}/mongodb-uri"
+  description = "MongoDB Atlas connection string for the SmartDine API"
+}
+
+# The image version each service should run. The App Build pipeline updates it.
+resource "aws_ssm_parameter" "image_tag" {
+  for_each = toset(["frontend", "api", "notifier"])
+  name     = "/${var.project}/${each.key}/image-tag"
+  type     = "String"
+  value    = "none"
+
+  lifecycle {
+    ignore_changes = [value] # the pipeline owns the value after creation
+  }
+}
+
+output "nat_public_ip"      { value = aws_eip.nat.public_ip }
+output "mongodb_secret_arn" { value = aws_secretsmanager_secret.mongodb_uri.arn }

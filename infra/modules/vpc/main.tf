@@ -38,13 +38,10 @@ resource "aws_subnet" "private" {
 }
 
 # Single NAT gateway (not one/AZ) to keep costs down
-resource "aws_eip" "nat" {
-  domain = "vpc"
-  tags   = { Name = "${var.name}-nat-eip" }
-}
+
 
 resource "aws_nat_gateway" "this" {
-  allocation_id = aws_eip.nat.id
+  allocation_id = var.nat_eip_allocation_id
   subnet_id     = aws_subnet.public[0].id
   tags          = { Name = "${var.name}-nat" }
   depends_on    = [aws_internet_gateway.this]
@@ -78,4 +75,11 @@ resource "aws_route_table_association" "private" {
   count          = var.az_count
   subnet_id      = aws_subnet.private[count.index].id
   route_table_id = aws_route_table.private.id
+}
+
+resource "aws_nat_gateway" "this" {
+  allocation_id = var.nat_eip_allocation_id
+  subnet_id     = aws_subnet.public[0].id
+  tags          = { Name = "${var.name}-nat" }
+  depends_on    = [aws_internet_gateway.this]
 }

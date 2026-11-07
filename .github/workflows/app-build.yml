@@ -60,3 +60,33 @@ jobs:
       - name: Push to ECR
         if: steps.check.outputs.exists == 'true'
         run: docker push "$IMAGE"
+
+      - name: Record and deploy the new image
+        if: steps.check.outputs.exists == 'true'
+        env:
+          SERVICE: smartdine-${{ matrix.service }}
+        run: |
+          # Remembers the new version, so the next Terraform apply uses it too
+          aws ssm put-parameter --name "/smartdine/${{ matrix.service }}/image-tag" \
+            --value "${{ github.sha }}" --overwrite
+
+          STATUS=$(aws ecs describe-services --cluster smartdine --services "$SERVICE" \
+            --query "services[0].status" --output text 2>/dev/null || echo "MISSING")
+          if [ "$STATUS" != "ACTIVE" ]; then
+            echo "$SERVICE isn't running (infrastructure destroyed?). The image is pushed and will deploy on the next Terraform apply."
+            exit 0
+          fi
+
+          # Copies the current task definition, swaps in the new image, and registers it
+          aws ecs describe-task-definition --task-definition "$SERVICE" --query taskDefinition > td.json
+          jq --arg IMG "$IMAGE" '.containerDefinitions[0].image = $IMG
+            | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
+                  .compatibilities, .registeredAt, .registeredBy)' td.json > td-new.json
+          NEW_TD=$(aws ecs register-task-definition --cli-input-json file://td-new.json \
+            --query taskDefinition.taskDefinitionArn --output text)
+
+          # Rolls deploy, then waits until the new version is healthy (after passing health checks), else rolls back
+          aws ecs update-service --cluster smartdine --service "$SERVICE" \
+            --task-definition "$NEW_TD" > /dev/null
+          aws ecs wait services-stable --cluster smartdine --services "$SERVICE"
+          echo "Deployed $IMAGE to $SERVICE"

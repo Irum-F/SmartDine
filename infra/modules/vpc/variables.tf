@@ -13,3 +13,8 @@ variable "az_count" {
   default     = 2
   description = "Number of Availability Zones to spread subnets across"
 }
+
+variable "nat_eip_allocation_id" {
+  type        = string
+  description = "Allocation ID of a pre-created Elastic IP for the NAT gateway"
+}
