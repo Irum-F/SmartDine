@@ -12,11 +12,13 @@ provider "aws" {
 }
 
 variable "github_owner_id" {
+  type        = string
   description = "Numeric GitHub account ID"
   default     = "297141229"
 }
 
 variable "github_repo_id" {
+  type        = string
   description = "Numeric GitHub repository ID"
   default     = "1440567584"
 }
@@ -26,9 +28,18 @@ locals {
   gh_repo  = split("/", var.github_repo)[1]
 }
 
-variable "region" { default = "ap-south-1" }
-variable "project" { default = "smartdine" }
+variable "region" {
+  type    = string
+  default = "ap-south-1"
+}
+
+variable "project" {
+  type    = string
+  default = "smartdine"
+}
+
 variable "github_repo" {
+  type        = string
   description = "GitHub repo in owner/name form"
   default     = "Irum-F/SmartDine"
 }

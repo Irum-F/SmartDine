@@ -1,3 +1,14 @@
+terraform {
+  required_version = ">= 1.10"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.0"
+    }
+  }
+}
+
 resource "aws_security_group" "alb" {
   name        = "${var.name}-alb"
   description = "Public HTTP and HTTPS to the load balancer"

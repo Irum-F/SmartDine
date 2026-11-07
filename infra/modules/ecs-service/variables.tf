@@ -11,11 +11,30 @@ variable "listener_arn" { type = string }
 variable "listener_priority" { type = number }
 variable "path_patterns" { type = list(string) }
 
-variable "cpu" { default = 256 }
-variable "memory" { default = 512 }
-variable "desired_count" { default = 1 }
-variable "health_check_path" { default = "/" }
-variable "log_retention_days" { default = 7 }
+variable "cpu" {
+  type    = number
+  default = 256
+}
+
+variable "memory" {
+  type    = number
+  default = 512
+}
+
+variable "desired_count" {
+  type    = number
+  default = 1
+}
+
+variable "health_check_path" {
+  type    = string
+  default = "/"
+}
+
+variable "log_retention_days" {
+  type    = number
+  default = 7
+}
 
 variable "environment" {
   type        = map(string)
