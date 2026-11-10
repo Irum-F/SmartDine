@@ -77,6 +77,10 @@ data "aws_secretsmanager_secret" "mongodb_uri" {
   name = "${var.project}/mongodb-uri"
 }
 
+data "aws_secretsmanager_secret" "jwt" {
+  name = "${var.project}/jwt-secret"
+}
+
 module "api" {
   source                = "../../modules/ecs-service"
   name                  = "${var.project}-api"
@@ -101,5 +105,6 @@ module "api" {
 
   secrets = {
     MONGODB_URI = data.aws_secretsmanager_secret.mongodb_uri.arn
+    JWT_SECRET  = data.aws_secretsmanager_secret.jwt.arn
   }
 }

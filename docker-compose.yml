@@ -13,6 +13,7 @@ services:
     environment:
       MONGODB_URI: mongodb://mongo:27017/smartdine
       PORT: 4000
+      JWT_SECRET: ${JWT_SECRET}
     ports: ["4000:4000"]
     depends_on: [mongo]
 

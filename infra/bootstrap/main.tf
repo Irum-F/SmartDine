@@ -175,3 +175,8 @@ resource "aws_ssm_parameter" "image_tag" {
 
 output "nat_public_ip" { value = aws_eip.nat.public_ip }
 output "mongodb_secret_arn" { value = aws_secretsmanager_secret.mongodb_uri.arn }
+
+resource "aws_secretsmanager_secret" "jwt" {
+  name        = "${var.project}/jwt-secret"
+  description = "Signing key for SmartDine staff login tokens"
+}

@@ -5,8 +5,10 @@ export const ORDER_STATUSES = ['placed', 'cooking', 'ready', 'served', 'cancelle
 const orderItemSchema = new mongoose.Schema(
   {
     menuItemId: { type: mongoose.Schema.Types.ObjectId, ref: 'MenuItem', required: true },
-    name: { type: String, required: true },          // snapshot at order time
-    unitPriceMinor: { type: Number, required: true }, // snapshot at order time
+    name: { type: String, required: true },
+    variantName: { type: String },
+    modifiers: [{ _id: false, group: String, option: String, priceDeltaMinor: Number }],
+    unitPriceMinor: { type: Number, required: true }, // variant price + modifiers, at order time
     qty: { type: Number, required: true, min: 1, max: 50 },
     notes: { type: String, maxlength: 200, default: '' },
   },
@@ -15,6 +17,9 @@ const orderItemSchema = new mongoose.Schema(
 
 const orderSchema = new mongoose.Schema(
   {
+    sessionId: { type: mongoose.Schema.Types.ObjectId, ref: 'TableSession', required: true },
+    idempotencyKey: { type: String, required: true },   // generated on the phone; repeats are ignored
+    placedByStaffId: { type: mongoose.Schema.Types.ObjectId, ref: 'Staff' },
     restaurantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Restaurant', required: true },
     tableId: { type: mongoose.Schema.Types.ObjectId, ref: 'Table', required: true },
     tableNumber: { type: Number, required: true },
@@ -32,5 +37,6 @@ const orderSchema = new mongoose.Schema(
 );
 
 orderSchema.index({ restaurantId: 1, status: 1, createdAt: 1 });
+orderSchema.index({ restaurantId: 1, idempotencyKey: 1 }, { unique: true });
 
 export const Order = mongoose.model('Order', orderSchema);

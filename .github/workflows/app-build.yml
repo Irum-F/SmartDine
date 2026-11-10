@@ -41,6 +41,20 @@ jobs:
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      - if: steps.check.outputs.exists == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/${{ matrix.service }}/package-lock.json
+
+      - name: Install and test
+        if: steps.check.outputs.exists == 'true'
+        working-directory: app/${{ matrix.service }}
+        run: |
+          npm ci
+          npm test
+
       - name: Build image
         if: steps.check.outputs.exists == 'true'
         run: |
