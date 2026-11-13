@@ -54,3 +54,5 @@ export async function staffAgent(app, slug = 'bistro') {
   if (res.status !== 200) throw new Error(`Test login failed: ${res.status}`);
   return agent;
 }
+
+export { Staff, hashPin };

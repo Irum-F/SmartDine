@@ -48,8 +48,11 @@ staffRouter.post('/login', loginLimiter, async (req, res) => {
   }
 
   if (staff.lockedUntil && staff.lockedUntil > new Date()) {
-    return res.status(423).json({ error: 'Too many wrong PINs. This account is locked for a few minutes.' });
-  }
+  // Same response and same timing as a wrong PIN, so a lock doesn't reveal the username exists
+  await verifyPin(pin, DUMMY_HASH);
+  const INVALID = { error: 'Invalid username or PIN. If it keeps failing, ask a manager.', code: 'INVALID_CREDENTIALS' };
+  return res.status(401).json(INVALID);
+}
 
   if (!verifyPin(pin, staff.pinHash)) {
     staff.failedAttempts += 1;

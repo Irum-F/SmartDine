@@ -66,7 +66,7 @@ test('five wrong PINs lock the account, even for the right PIN', async () => {
   await makeStaff();
   for (let i = 0; i < 5; i++) await login('111999');
   const res = await login('482913');
-  assert.equal(res.status, 423);
+  assert.equal(res.status, 401);
 });
 
 test('changing the PIN signs out older sessions', async () => {

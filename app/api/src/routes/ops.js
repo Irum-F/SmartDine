@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { Staff } from '../models/staff.js';
 import { Table } from '../models/table.js';
 import { TableSession } from '../models/tableSession.js';
 import { MenuItem } from '../models/menuItem.js';
@@ -124,4 +125,35 @@ opsRouter.patch('/restaurant/busy-mode', requireStaff({ roles: MANAGERS }), asyn
     { new: true }
   );
   res.json({ busyMode: restaurant.busyMode });
+});
+
+// Staff list for managers, showing who is locked out
+opsRouter.get('/staff', requireStaff({ roles: MANAGERS }), async (req, res) => {
+  const staff = await Staff.find({ restaurantId: req.staff.restaurantId }).sort({ role: 1, username: 1 });
+  const now = new Date();
+  res.json(
+    staff.map((s) => ({
+      id: s._id,
+      name: s.name,
+      username: s.username,
+      role: s.role,
+      active: s.active,
+      locked: Boolean(s.lockedUntil && s.lockedUntil > now),
+    }))
+  );
+});
+
+// Unlock instantly. Managers can't unlock owners, only an owner can.
+opsRouter.post('/staff/:staffId/unlock', requireStaff({ roles: MANAGERS }), async (req, res) => {
+  const id = objectId.safeParse(req.params.staffId);
+  if (!id.success) return badRequest(res, id.error.issues);
+
+  const target = await Staff.findOne({ _id: id.data, restaurantId: req.staff.restaurantId });
+  if (!target || (target.role === 'owner' && req.staff.role !== 'owner')) {
+    return res.status(404).json({ error: 'Staff member not found', code: 'NOT_FOUND' });
+  }
+
+  await Staff.updateOne({ _id: target._id }, { $set: { failedAttempts: 0, lockedUntil: null } });
+  req.log.info({ staffId: target._id, unlockedBy: req.staff._id }, 'Staff account unlocked');
+  res.json({ id: target._id, locked: false });
 });
