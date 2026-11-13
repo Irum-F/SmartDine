@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { randomInt } from 'node:crypto';
+import { hashPin } from '../lib/pin.js';
 import { z } from 'zod';
 import { Staff } from '../models/staff.js';
 import { Table } from '../models/table.js';
@@ -156,4 +158,32 @@ opsRouter.post('/staff/:staffId/unlock', requireStaff({ roles: MANAGERS }), asyn
   await Staff.updateOne({ _id: target._id }, { $set: { failedAttempts: 0, lockedUntil: null } });
   req.log.info({ staffId: target._id, unlockedBy: req.staff._id }, 'Staff account unlocked');
   res.json({ id: target._id, locked: false });
+});
+
+// A staff member forgot their PIN: a manager gives them a new temporary one on the spot. The temporary PIN is shown once to the manager, who tells it to the staff member
+opsRouter.post('/staff/:staffId/reset-pin', requireStaff({ roles: MANAGERS }), async (req, res) => {
+  const id = objectId.safeParse(req.params.staffId);
+  if (!id.success) return badRequest(res, id.error.issues);
+
+  if (id.data === String(req.staff._id)) {
+    return res.status(400).json({ error: 'Use change PIN for your own account', code: 'SELF_RESET' });
+  }
+
+  const target = await Staff.findOne({ _id: id.data, restaurantId: req.staff.restaurantId });
+  if (!target || (target.role === 'owner' && req.staff.role !== 'owner')) {
+    return res.status(404).json({ error: 'Staff member not found', code: 'NOT_FOUND' });
+  }
+
+  const tempPin = String(randomInt(100000, 1000000));
+  await Staff.updateOne(
+    { _id: target._id },
+    {
+      $set: { pinHash: await hashPin(tempPin), mustChangePin: true, failedAttempts: 0, lockedUntil: null },
+      $inc: { tokenVersion: 1 }, // signs out every device using the old PIN
+    }
+  );
+
+  req.log.info({ staffId: target._id, resetBy: req.staff._id }, 'Staff PIN reset'); // never the PIN itself
+  res.set('Cache-Control', 'no-store');
+  res.json({ id: target._id, username: target.username, temporaryPin: tempPin });
 });
