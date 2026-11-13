@@ -1,3 +1,6 @@
+import { guestRouter } from './routes/guest.js';
+import { opsRouter } from './routes/ops.js';
+import { OrderError } from './services/orders.js';
 import cookieParser from 'cookie-parser';
 import { staffRouter } from './routes/staff.js';
 import express from 'express';
@@ -21,11 +24,16 @@ export function createApp() {
 
   app.use('/api', healthRouter);
   app.use('/api/staff', staffRouter);
+  app.use('/api/t', guestRouter);
+  app.use('/api/ops', opsRouter);
 
   app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
+    if (err instanceof OrderError) {
+      return res.status(err.status).json({ error: err.message, code: err.code, details: err.details });
+    }
     req.log.error({ err }, 'Unhandled error');
     res.status(500).json({ error: 'Internal server error' });
   });

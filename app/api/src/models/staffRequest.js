@@ -6,6 +6,8 @@ const staffRequestSchema = new mongoose.Schema(
     tableId: { type: mongoose.Schema.Types.ObjectId, ref: 'Table', required: true },
     tableNumber: { type: Number, required: true },
     status: { type: String, enum: ['open', 'resolved'], default: 'open' },
+    type: { type: String, enum: ['help', 'bill'], default: 'help' },
+    sessionId: { type: mongoose.Schema.Types.ObjectId, ref: 'TableSession', required: true },
   },
   { timestamps: true }
 );
