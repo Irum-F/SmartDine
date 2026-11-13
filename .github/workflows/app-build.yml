@@ -73,7 +73,15 @@ jobs:
 
       - name: Push to ECR
         if: steps.check.outputs.exists == 'true'
-        run: docker push "$IMAGE"
+        env:
+          REPO: smartdine-${{ matrix.service }}
+          TAG: ${{ github.sha }}
+        run: |
+          if aws ecr describe-images --repository-name "$REPO" --image-ids imageTag="$TAG" >/dev/null 2>&1; then
+            echo "Image $TAG is already in ECR (re-run of the same commit), skipping push"
+          else
+            docker push "$IMAGE"
+          fi
 
       - name: Record and deploy the new image
         if: steps.check.outputs.exists == 'true'
