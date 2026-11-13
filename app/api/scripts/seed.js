@@ -37,6 +37,9 @@ const tables = await Table.insertMany(
   }))
 );
 
+console.log('Table QR tokens:');
+for (const t of tables) console.log(`  Table ${t.number}: ${t.qrToken}`);
+
 await MenuItem.insertMany(
   [
     {
