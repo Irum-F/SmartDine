@@ -50,10 +50,6 @@ variable "secrets" {
   description = "Environment variable name => Secrets Manager secret ARN"
 }
 
-variable "desired_count" {
-  type    = number
-  default = 1
-}
 variable "sticky_sessions" {
   type    = bool
   default = false
