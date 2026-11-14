@@ -105,7 +105,7 @@ staffRouter.post('/change-pin', requireStaff({ allowPinChange: true }), async (r
     return res.status(401).json({ error: 'Current PIN is wrong' });
   }
 
-  staff.pinHash = hashPin(newPin);
+  staff.pinHash = hashPin(parsed.data.newPin);
   staff.mustChangePin = false;
   staff.tokenVersion += 1;
   await staff.save();

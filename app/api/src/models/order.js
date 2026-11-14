@@ -11,7 +11,6 @@ const orderItemSchema = new mongoose.Schema(
     unitPriceMinor: { type: Number, required: true }, // variant price + modifiers, at order time
     qty: { type: Number, required: true, min: 1, max: 50 },
     notes: { type: String, maxlength: 200, default: '' },
-    deviceId: { type: String, required: true },
   },
   { _id: false }
 );
@@ -19,6 +18,7 @@ const orderItemSchema = new mongoose.Schema(
 const orderSchema = new mongoose.Schema(
   {
     sessionId: { type: mongoose.Schema.Types.ObjectId, ref: 'TableSession', required: true },
+    deviceId: String, // the phone that placed it; empty for staff-mode orders
     idempotencyKey: { type: String, required: true },   // generated on the phone; repeats are ignored
     placedByStaffId: { type: mongoose.Schema.Types.ObjectId, ref: 'Staff' },
     restaurantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Restaurant', required: true },
@@ -33,7 +33,6 @@ const orderSchema = new mongoose.Schema(
     placedBy: { type: String, enum: ['guest', 'staff'], default: 'guest' },
     guestPhone: { type: String },                     // only if the guest opts in to WhatsApp
     notifyConsent: { type: Boolean, default: false },
-    deviceId: { type: String, required: true },
   },
   { timestamps: true }
 );

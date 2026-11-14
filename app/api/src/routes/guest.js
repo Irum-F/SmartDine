@@ -92,7 +92,6 @@ guestRouter.get('/:qrToken', loadTable, async (req, res) => {
 guestRouter.post('/:qrToken/orders', orderLimiter, loadTable, async (req, res) => {
   const key = idempotencyKey.safeParse(req.get('Idempotency-Key'));
   if (!key.success) return badRequest(res, key.error.issues);
-  if (!duplicate) emitOrder(order);
 
   const body = orderBody.required({ expectedTotalMinor: true }).safeParse(req.body);
   if (!body.success) return badRequest(res, body.error.issues);
@@ -127,6 +126,7 @@ guestRouter.post('/:qrToken/orders', orderLimiter, loadTable, async (req, res) =
     deviceId: deviceId(req, res),
   });
 
+if (!duplicate) emitOrder(order);
   res.status(duplicate ? 200 : 201).json(publicOrder(order));
 });
 
