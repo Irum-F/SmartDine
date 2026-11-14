@@ -97,14 +97,27 @@ module "api" {
   listener_priority     = 10
   path_patterns         = ["/api/*", "/socket.io/*"]
   health_check_path     = "/api/health"
+  desired_count         = 2
+  sticky_sessions       = true
 
   environment = {
-    NODE_ENV = "production"
-    PORT     = "4000"
+    NODE_ENV   = "production"
+    PORT       = "4000"
+    APP_ORIGIN = "https://${var.domain}"
   }
 
   secrets = {
     MONGODB_URI = data.aws_secretsmanager_secret.mongodb_uri.arn
     JWT_SECRET  = data.aws_secretsmanager_secret.jwt.arn
+    REDIS_URL   = module.redis.url_secret_arn
   }
+}
+
+module "redis" {
+  source                     = "../../modules/redis"
+  name                       = "${var.project}-cache"
+  secret_name                = "${var.project}/redis-url"
+  vpc_id                     = module.vpc.vpc_id
+  subnet_ids                 = module.vpc.private_subnet_ids
+  allowed_security_group_ids = [module.api.security_group_id]
 }
