@@ -14,6 +14,7 @@ services:
       MONGODB_URI: mongodb://mongo:27017/smartdine
       PORT: 4000
       JWT_SECRET: ${JWT_SECRET}
+      REDIS_URL: redis://redis:6379
     ports: ["4000:4000"]
     depends_on: [mongo]
 

@@ -1,3 +1,6 @@
+import { Order } from '../models/order.js';
+import { closeSession } from '../services/sessions.js';
+import { emitOrder, emitRequest, emitAvailability, emitBusy, emitSessionOpened } from '../realtime/events.js';
 import { Router } from 'express';
 import { randomInt } from 'node:crypto';
 import { hashPin } from '../lib/pin.js';
@@ -17,6 +20,8 @@ export const opsRouter = Router();
 const FLOOR = ['owner', 'manager', 'waiter'];
 const MENU_AVAILABILITY = ['owner', 'manager', 'kitchen'];
 const MANAGERS = ['owner', 'manager'];
+const KITCHEN = ['owner', 'manager', 'kitchen'];
+const ALL_STAFF = ['owner', 'manager', 'waiter', 'kitchen'];
 
 // Every table with its current session, for the waiter's floor screen
 opsRouter.get('/tables', requireStaff({ roles: FLOOR }), async (req, res) => {
@@ -48,6 +53,7 @@ opsRouter.post('/tables/:tableId/open', requireStaff({ roles: FLOOR }), async (r
       tableNumber: table.number,
       openedBy: req.staff._id,
     });
+    emitSessionOpened(session);
     res.status(201).json({ id: session._id, tableNumber: session.tableNumber });
   } catch (err) {
     // The unique index allows only one open session per table
@@ -62,14 +68,10 @@ opsRouter.post('/sessions/:sessionId/close', requireStaff({ roles: FLOOR }), asy
   const id = objectId.safeParse(req.params.sessionId);
   if (!id.success) return badRequest(res, id.error.issues);
 
-  const session = await TableSession.findOneAndUpdate(
-    { _id: id.data, restaurantId: req.staff.restaurantId, status: 'open' },
-    { status: 'closed', closedAt: new Date() },
-    { new: true }
-  );
+  // closeSession closes it, resolves its open staff requests and tells every screen, all in one place
+  const session = await closeSession({ _id: id.data, restaurantId: req.staff.restaurantId }, 'staff');
   if (!session) return res.status(404).json({ error: 'Open session not found', code: 'NOT_FOUND' });
 
-  await StaffRequest.updateMany({ sessionId: session._id, status: 'open' }, { status: 'resolved' });
   res.json({ id: session._id, status: session.status });
 });
 
@@ -94,6 +96,7 @@ opsRouter.post('/sessions/:sessionId/orders', requireStaff({ roles: FLOOR }), as
     placedBy: 'staff',
     staffId: req.staff._id,
   });
+  if (!duplicate) emitOrder(order);
   res.status(duplicate ? 200 : 201).json(publicOrder(order));
 });
 
@@ -112,6 +115,7 @@ opsRouter.patch('/menu-items/:itemId/availability', requireStaff({ roles: MENU_A
     { new: true }
   );
   if (!item) return res.status(404).json({ error: 'Menu item not found', code: 'NOT_FOUND' });
+  emitAvailability(item);
   res.json({ id: item._id, available: item.available });
 });
 
@@ -126,6 +130,7 @@ opsRouter.patch('/restaurant/busy-mode', requireStaff({ roles: MANAGERS }), asyn
     { busyMode: body.data.busyMode },
     { new: true }
   );
+  emitBusy(restaurant);
   res.json({ busyMode: restaurant.busyMode });
 });
 
@@ -186,4 +191,65 @@ opsRouter.post('/staff/:staffId/reset-pin', requireStaff({ roles: MANAGERS }), a
   req.log.info({ staffId: target._id, resetBy: req.staff._id }, 'Staff PIN reset'); // never the PIN itself
   res.set('Cache-Control', 'no-store');
   res.json({ id: target._id, username: target.username, temporaryPin: tempPin });
+});
+
+// Snapshot for kitchen and floor screens: loaded on every (re)connect, then kept fresh by events
+opsRouter.get('/kitchen/orders', requireStaff({ roles: ALL_STAFF }), async (req, res) => {
+  const orders = await Order.find({ restaurantId: req.staff.restaurantId, status: { $in: ['placed', 'cooking', 'ready'] } })
+    .sort({ createdAt: 1 })
+    .limit(500);
+  res.json({ serverTime: new Date(), orders: orders.map(publicOrder) });
+});
+
+// Which role may move an order to which status, and from where
+const TRANSITIONS = {
+  cooking: { from: ['placed'], roles: KITCHEN },
+  ready: { from: ['cooking'], roles: KITCHEN },
+  served: { from: ['ready'], roles: FLOOR },
+  cancelled: { from: ['placed', 'cooking'], roles: MANAGERS },
+};
+const statusBody = z.object({ status: z.enum(Object.keys(TRANSITIONS)) });
+
+opsRouter.patch('/orders/:orderId/status', requireStaff({ roles: ALL_STAFF }), async (req, res) => {
+  const id = objectId.safeParse(req.params.orderId);
+  if (!id.success) return badRequest(res, id.error.issues);
+  const body = statusBody.safeParse(req.body);
+  if (!body.success) return badRequest(res, body.error.issues);
+
+  const rule = TRANSITIONS[body.data.status];
+  if (!rule.roles.includes(req.staff.role)) {
+    return res.status(403).json({ error: "Your role can't make this change", code: 'FORBIDDEN' });
+  }
+
+  // Two kitchen tablets tapping at once: the status condition lets exactly one succeed
+  const order = await Order.findOneAndUpdate(
+    { _id: id.data, restaurantId: req.staff.restaurantId, status: { $in: rule.from } },
+    { status: body.data.status },
+    { new: true }
+  );
+  if (!order) {
+    const current = await Order.findOne({ _id: id.data, restaurantId: req.staff.restaurantId }, 'status');
+    if (!current) return res.status(404).json({ error: 'Order not found', code: 'NOT_FOUND' });
+    return res.status(409).json({ error: `This order is already ${current.status}`, code: 'INVALID_TRANSITION', details: { status: current.status } });
+  }
+  emitOrder(order);
+  res.json(publicOrder(order));
+});
+
+opsRouter.get('/requests', requireStaff({ roles: FLOOR }), async (req, res) => {
+  const list = await StaffRequest.find({ restaurantId: req.staff.restaurantId, status: 'open' }).sort({ createdAt: 1 });
+  res.json(list.map((r) => ({ id: r._id, type: r.type, tableNumber: r.tableNumber, createdAt: r.createdAt })));
+});
+
+opsRouter.post('/requests/:requestId/resolve', requireStaff({ roles: FLOOR }), async (req, res) => {
+  const id = objectId.safeParse(req.params.requestId);
+  if (!id.success) return badRequest(res, id.error.issues);
+  const request = await StaffRequest.findOneAndUpdate(
+    { _id: id.data, restaurantId: req.staff.restaurantId, status: 'open' },
+    { status: 'resolved' },
+    { new: true }
+  );
+  if (!request) return res.status(404).json({ error: 'Open request not found', code: 'NOT_FOUND' });
+  emitRequest(request);
+  res.json({ id: request._id, status: request.status });
 });

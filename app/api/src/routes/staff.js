@@ -7,6 +7,7 @@ import { Staff } from '../models/staff.js';
 import { hashPin, verifyPin } from '../lib/pin.js';
 import { issueToken, COOKIE, cookieOptions } from '../lib/auth.js';
 import { requireStaff } from '../middleware/requireStaff.js';
+import { disconnectStaff } from '../realtime/events.js';
 
 export const staffRouter = Router();
 
@@ -72,8 +73,10 @@ staffRouter.post('/login', loginLimiter, async (req, res) => {
   res.json({ name: staff.name, role: staff.role, mustChangePin: staff.mustChangePin });
 });
 
-staffRouter.post('/logout', (req, res) => {
-  res.clearCookie(COOKIE, { ...cookieOptions, maxAge: undefined });
+staffRouter.post('/logout', requireStaff({ allowPinChange: true }), async (req, res) => {
+  // ...your existing logic (e.g. bump tokenVersion)
+  res.clearCookie('sd_staff', cookieOptions);
+  disconnectStaff(req.staff._id);
   res.json({ ok: true });
 });
 
@@ -102,11 +105,12 @@ staffRouter.post('/change-pin', requireStaff({ allowPinChange: true }), async (r
     return res.status(401).json({ error: 'Current PIN is wrong' });
   }
 
-  staff.pinHash = hashPin(parsed.data.newPin);
+  staff.pinHash = hashPin(newPin);
   staff.mustChangePin = false;
-  staff.tokenVersion += 1; // signs out every other device using this account
+  staff.tokenVersion += 1;
   await staff.save();
+  res.cookie('sd_staff', await issueToken(staff), cookieOptions);
+  disconnectStaff(req.staff._id);
 
-  res.cookie(COOKIE, await issueToken(staff), cookieOptions);
   res.json({ ok: true });
 });

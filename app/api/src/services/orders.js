@@ -78,6 +78,7 @@ export async function priceOrder(restaurantId, lines) {
 
 export async function createOrder({
   restaurantId,
+  deviceId,
   session,
   lines,
   idempotencyKey,
@@ -102,6 +103,7 @@ export async function createOrder({
   try {
     const order = await Order.create({
       restaurantId,
+      deviceId,
       tableId: session.tableId,
       tableNumber: session.tableNumber,
       sessionId: session._id,
@@ -136,6 +138,7 @@ export function publicOrder(o) {
     totalMinor: o.totalMinor,
     status: o.status,
     placedBy: o.placedBy,
+    updatedAt: o.updatedAt,
     createdAt: o.createdAt,
   };
 }

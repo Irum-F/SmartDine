@@ -45,13 +45,17 @@ export async function seedRestaurant(slug = 'bistro') {
     restaurantId, name: 'Wendy', username: 'wendy', role: 'waiter',
     pinHash: hashPin('482913'), mustChangePin: false,
   });
+  await Staff.create({
+    restaurantId, name: 'Kiran', username: 'kiran', role: 'kitchen',
+    pinHash: hashPin('482913'), mustChangePin: false,
+  });
   return { restaurant, table, pizza, soda };
 }
 
-export async function staffAgent(app, slug = 'bistro') {
+export async function staffAgent(app, slug = 'bistro', username = 'wendy') {
   const agent = request.agent(app);
-  const res = await agent.post('/api/staff/login').send({ restaurantSlug: slug, username: 'wendy', pin: '482913' });
-  if (res.status !== 200) throw new Error(`Test login failed: ${res.status}`);
+  const res = await agent.post('/api/staff/login').send({ restaurantSlug: slug, username, pin: '482913' });
+  if (res.status !== 200) throw new Error(`Test login failed for ${username}: ${res.status}`);
   return agent;
 }
 

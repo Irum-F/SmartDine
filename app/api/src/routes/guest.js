@@ -11,6 +11,26 @@ import { StaffRequest } from '../models/staffRequest.js';
 import { isOpenNow } from '../lib/hours.js';
 import { createOrder, publicOrder } from '../services/orders.js';
 import { objectId, idempotencyKey, orderBody, badRequest } from '../lib/validation.js';
+import { randomUUID } from 'node:crypto';
+import { emitOrder, emitRequest } from '../realtime/events.js';
+
+const DEVICE_COOKIE = 'sd_device';
+
+// One random id per phone, so only the phone that ordered can cancel
+function deviceId(req, res) {
+  let id = req.cookies?.[DEVICE_COOKIE];
+  if (!/^[0-9a-f-]{36}$/.test(id ?? '')) {
+    id = randomUUID();
+    res.cookie(DEVICE_COOKIE, id, {
+      httpOnly: true,
+      sameSite: 'lax', // the QR scan arrives as a top-level navigation from the camera app
+      secure: config.NODE_ENV === 'production',
+      maxAge: 24 * 60 * 60 * 1000,
+      path: '/api/t',
+    });
+  }
+  return id;
+}
 
 export const guestRouter = Router();
 
@@ -41,6 +61,7 @@ guestRouter.get('/:qrToken', loadTable, async (req, res) => {
   const [session, items] = await Promise.all([
     findOpenSession(table),
     MenuItem.find({ restaurantId: restaurant._id }).sort({ category: 1, sortOrder: 1 }).lean(),
+    deviceId(req, res),
   ]);
 
   res.json({
@@ -71,6 +92,7 @@ guestRouter.get('/:qrToken', loadTable, async (req, res) => {
 guestRouter.post('/:qrToken/orders', orderLimiter, loadTable, async (req, res) => {
   const key = idempotencyKey.safeParse(req.get('Idempotency-Key'));
   if (!key.success) return badRequest(res, key.error.issues);
+  if (!duplicate) emitOrder(order);
 
   const body = orderBody.required({ expectedTotalMinor: true }).safeParse(req.body);
   if (!body.success) return badRequest(res, body.error.issues);
@@ -102,6 +124,7 @@ guestRouter.post('/:qrToken/orders', orderLimiter, loadTable, async (req, res) =
     expectedTotalMinor: body.data.expectedTotalMinor,
     guestPhone: body.data.guestPhone,
     notifyConsent: body.data.notifyConsent,
+    deviceId: deviceId(req, res),
   });
 
   res.status(duplicate ? 200 : 201).json(publicOrder(order));
@@ -123,17 +146,21 @@ guestRouter.post('/:qrToken/orders/:orderId/cancel', loadTable, async (req, res)
   const session = await findOpenSession(req.table);
   if (!session) return res.status(403).json({ error: 'This table isn\'t open', code: 'TABLE_NOT_OPEN' });
 
-  const order = await Order.findOneAndUpdate(
-    { _id: id.data, sessionId: session._id, status: 'placed' },
-    { status: 'cancelled' },
-    { new: true }
-  );
+  const device = req.cookies?.[DEVICE_COOKIE];
+  const order = device
+    ? await Order.findOneAndUpdate(
+        { _id: id.data, sessionId: session._id, status: 'placed', deviceId: device },
+        { status: 'cancelled' },
+        { new: true }
+      )
+    : null;
   if (!order) {
     return res.status(409).json({
-      error: 'This order is already being prepared. Please ask a member of staff.',
+      error: 'Only the phone that placed this order can cancel it, before the kitchen starts. Please ask a member of staff.',
       code: 'CANNOT_CANCEL',
     });
   }
+  emitOrder(order);
   res.json(publicOrder(order));
 });
 
@@ -160,5 +187,12 @@ guestRouter.post('/:qrToken/requests', loadTable, async (req, res) => {
     },
     { upsert: true, new: true }
   );
+
+// A table calling for staff is still active, so the idle sweeper must not close it
+  await TableSession.updateOne({ _id: session._id }, { lastActivityAt: new Date() });
+
+  // The waiters' screens show the alert instantly
+  emitRequest(request);
+
   res.status(201).json({ id: request._id, type: request.type, status: request.status });
 });

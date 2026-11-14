@@ -101,13 +101,20 @@ test("staff can't open another restaurant's table", async () => {
   assert.equal(res.status, 404);
 });
 
-test('an order can be cancelled only once, while still placed', async () => {
+test('only the phone that placed an order can cancel it, once, before cooking', async () => {
   const fx = await seedRestaurant();
   await openTable(fx);
-  const order = await placeOrder(fx.table.qrToken, largePizzaOrder(fx, EXPECTED_TOTAL));
+  const phone = request.agent(app);
+  const order = await phone
+    .post(`/api/t/${fx.table.qrToken}/orders`)
+    .set('Idempotency-Key', randomUUID())
+    .send(largePizzaOrder(fx, EXPECTED_TOTAL));
   const url = `/api/t/${fx.table.qrToken}/orders/${order.body.id}/cancel`;
-  const first = await request(app).post(url);
-  const second = await request(app).post(url);
+
+  const stranger = await request(app).post(url);
+  const first = await phone.post(url);
+  const second = await phone.post(url);
+  assert.equal(stranger.status, 409);
   assert.equal(first.status, 200);
   assert.equal(first.body.status, 'cancelled');
   assert.equal(second.status, 409);
