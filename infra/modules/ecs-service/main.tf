@@ -51,12 +51,16 @@ resource "aws_security_group" "service" {
 }
 
 resource "aws_lb_target_group" "this" {
-  name                 = "${var.name}-tg"
+  name                 = "${var.name}-${var.container_port}"
   port                 = var.container_port
   protocol             = "HTTP"
   target_type          = "ip" # for Fargate
   vpc_id               = var.vpc_id
   deregistration_delay = 30
+
+  lifecycle {
+    create_before_destroy = true
+  }
 
   health_check {
     path                = var.health_check_path

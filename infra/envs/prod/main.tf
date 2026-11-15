@@ -50,8 +50,8 @@ module "frontend" {
   region                = var.region
   cluster_id            = module.ecs_cluster.cluster_id
   execution_role_arn    = module.ecs_cluster.execution_role_arn
-  image                 = "public.ecr.aws/nginx/nginx:latest" # temporary placeholder until real app image
-  container_port        = 80
+  image                 = "${data.aws_ecr_repository.frontend.repository_url}:${nonsensitive(data.aws_ssm_parameter.frontend_image_tag.value)}"
+  container_port        = 3000
   vpc_id                = module.vpc.vpc_id
   private_subnet_ids    = module.vpc.private_subnet_ids
   alb_security_group_id = module.alb.security_group_id
@@ -59,6 +59,9 @@ module "frontend" {
   listener_priority     = 100
   path_patterns         = ["/*"]
   execution_role_name   = module.ecs_cluster.execution_role_name
+  health_check_path     = "/healthz"
+  environment           = { NODE_ENV = "production", PORT = "3000", HOSTNAME = "0.0.0.0" }
+  desired_count         = 2
 }
 
 data "aws_eip" "nat" {
@@ -110,6 +113,14 @@ module "api" {
     MONGODB_URI = data.aws_secretsmanager_secret.mongodb_uri.arn
     JWT_SECRET  = data.aws_secretsmanager_secret.jwt.arn
     REDIS_URL   = module.redis.url_secret_arn
+  }
+
+  data "aws_ecr_repository" "frontend" {
+  name = "${var.project}-frontend"
+  }
+
+  data "aws_ssm_parameter" "frontend_image_tag" {
+  name = "/${var.project}/frontend/image-tag"
   }
 }
 
