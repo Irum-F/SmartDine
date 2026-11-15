@@ -4,4 +4,4 @@ node_modules
 test
 Dockerfile
 .dockerignore
-npm-debug.log*
+"npm-debug.log*"

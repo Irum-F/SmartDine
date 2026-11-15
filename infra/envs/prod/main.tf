@@ -116,11 +116,11 @@ module "api" {
   }
 
   data "aws_ecr_repository" "frontend" {
-  name = "${var.project}-frontend"
+    name = "${var.project}-frontend"
   }
 
   data "aws_ssm_parameter" "frontend_image_tag" {
-  name = "/${var.project}/frontend/image-tag"
+    name = "/${var.project}/frontend/image-tag"
   }
 }
 
