@@ -11,6 +11,7 @@ services:
   api:
     build: ./app/api
     environment:
+      NODE_ENV: development
       MONGODB_URI: mongodb://mongo:27017/smartdine
       PORT: 4000
       JWT_SECRET: ${JWT_SECRET}
