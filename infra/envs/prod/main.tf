@@ -84,6 +84,14 @@ data "aws_secretsmanager_secret" "jwt" {
   name = "${var.project}/jwt-secret"
 }
 
+data "aws_ecr_repository" "frontend" {
+  name = "${var.project}-frontend"
+}
+
+data "aws_ssm_parameter" "frontend_image_tag" {
+  name = "/${var.project}/frontend/image-tag"
+}
+
 module "api" {
   source                = "../../modules/ecs-service"
   name                  = "${var.project}-api"
@@ -113,14 +121,6 @@ module "api" {
     MONGODB_URI = data.aws_secretsmanager_secret.mongodb_uri.arn
     JWT_SECRET  = data.aws_secretsmanager_secret.jwt.arn
     REDIS_URL   = module.redis.url_secret_arn
-  }
-
-  data "aws_ecr_repository" "frontend" {
-  name = "${var.project}-frontend"
-  }
-
-  data "aws_ssm_parameter" "frontend_image_tag" {
-  name = "/${var.project}/frontend/image-tag"
   }
 }
 
