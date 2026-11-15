@@ -19,6 +19,9 @@ jobs:
       fail-fast: false
       matrix:
         service: [frontend, api, notifier]
+    concurrency:
+      group: terraform-prod
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
 
@@ -83,32 +86,50 @@ jobs:
             docker push "$IMAGE"
           fi
 
-      - name: Record and deploy the new image
+      - name: Record and deploy
         if: steps.check.outputs.exists == 'true'
         env:
-          SERVICE: smartdine-${{ matrix.service }}
+          SERVICE: ${{ matrix.service }}
+          IMAGE_TAG: ${{ github.sha }}
         run: |
-          # Remembers the new version, so the next Terraform apply uses it too
-          aws ssm put-parameter --name "/smartdine/${{ matrix.service }}/image-tag" \
-            --value "${{ github.sha }}" --overwrite
+          set -euo pipefail
+          NAME="smartdine-${SERVICE}"
+          CLUSTER=$(aws ecs list-clusters --query "clusterArns[?contains(@, 'smartdine')] | [0]" --output text)
+          REPO_URI=$(aws ecr describe-repositories --repository-names "$NAME" \
+            --query 'repositories[0].repositoryUri' --output text)
+          IMAGE="${REPO_URI}:${IMAGE_TAG}"
 
-          STATUS=$(aws ecs describe-services --cluster smartdine --services "$SERVICE" \
-            --query "services[0].status" --output text 2>/dev/null || echo "MISSING")
+          # 1. Record the tag, so Terraform always deploys the latest image too
+          aws ssm put-parameter --name "/smartdine/${SERVICE}/image-tag" --value "$IMAGE_TAG" --overwrite > /dev/null
+
+          # 2. No service yet: Terraform will create it with this tag
+          STATUS=$(aws ecs describe-services --cluster "$CLUSTER" --services "$NAME" \
+            --query 'services[0].status' --output text 2>/dev/null || echo NONE)
           if [ "$STATUS" != "ACTIVE" ]; then
-            echo "$SERVICE isn't running (infrastructure destroyed?). The image is pushed and will deploy on the next Terraform apply."
+            echo "::notice::$NAME doesn't exist yet. Terraform will create it with $IMAGE_TAG."
             exit 0
           fi
 
-          # Copies the current task definition, swaps in the new image, and registers it
-          aws ecs describe-task-definition --task-definition "$SERVICE" --query taskDefinition > td.json
-          jq --arg IMG "$IMAGE" '.containerDefinitions[0].image = $IMG
-            | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
-                  .compatibilities, .registeredAt, .registeredBy)' td.json > td-new.json
-          NEW_TD=$(aws ecs register-task-definition --cli-input-json file://td-new.json \
-            --query taskDefinition.taskDefinitionArn --output text)
+          # 3. Service still runs a placeholder (like nginx): only Terraform can change port and health check
+          CURRENT_TD=$(aws ecs describe-services --cluster "$CLUSTER" --services "$NAME" \
+            --query 'services[0].taskDefinition' --output text)
+          CURRENT_IMAGE=$(aws ecs describe-task-definition --task-definition "$CURRENT_TD" \
+            --query 'taskDefinition.containerDefinitions[0].image' --output text)
+          case "$CURRENT_IMAGE" in
+            "$REPO_URI":*) ;;
+            *)
+              echo "::notice::$NAME runs $CURRENT_IMAGE. Image pushed and tag recorded; run Terraform Apply to switch it over."
+              exit 0
+              ;;
+          esac
 
-          # Rolls deploy, then waits until the new version is healthy (after passing health checks), else rolls back
-          aws ecs update-service --cluster smartdine --service "$SERVICE" \
-            --task-definition "$NEW_TD" > /dev/null
-          aws ecs wait services-stable --cluster smartdine --services "$SERVICE"
-          echo "Deployed $IMAGE to $SERVICE"
+          # 4. Roll forward: same task definition, new image
+          aws ecs describe-task-definition --task-definition "$CURRENT_TD" --query taskDefinition \
+            | jq --arg img "$IMAGE" '.containerDefinitions[0].image = $img
+                | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
+                      .compatibilities, .registeredAt, .registeredBy)' > td.json
+          NEW_TD=$(aws ecs register-task-definition --cli-input-json file://td.json \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          aws ecs update-service --cluster "$CLUSTER" --service "$NAME" --task-definition "$NEW_TD" > /dev/null
+          echo "Waiting for $NAME to become stable on $IMAGE_TAG…"
+          aws ecs wait services-stable --cluster "$CLUSTER" --services "$NAME"
