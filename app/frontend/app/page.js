@@ -4,6 +4,9 @@ export default function Home() {
       <p className="eyebrow">SmartDine</p>
       <h1>Order from your table</h1>
       <p className="muted">Scan the QR code on your table to see the menu and order.</p>
+      <p style={{ marginTop: 32 }}>
+        <a href="/staff/login" className="muted">Staff sign in</a>
+      </p>
     </main>
   );
 }

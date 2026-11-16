@@ -1,3 +1,4 @@
 # This stops search engines indexing table URLs
 User-agent: *
 Disallow: /t/
+Disallow: /staff/

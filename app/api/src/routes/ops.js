@@ -1,6 +1,6 @@
 import { Order } from '../models/order.js';
 import { closeSession } from '../services/sessions.js';
-import { emitOrder, emitRequest, emitAvailability, emitBusy, emitSessionOpened } from '../realtime/events.js';
+import { emitOrder, emitRequest, emitAvailability, emitBusy, emitSessionOpened, disconnectTable } from '../realtime/events.js';
 import { Router } from 'express';
 import { randomInt } from 'node:crypto';
 import { hashPin } from '../lib/pin.js';
@@ -14,6 +14,8 @@ import { StaffRequest } from '../models/staffRequest.js';
 import { requireStaff } from '../middleware/requireStaff.js';
 import { createOrder, publicOrder } from '../services/orders.js';
 import { objectId, idempotencyKey, orderBody, badRequest } from '../lib/validation.js';
+import { randomBytes } from 'node:crypto';
+import { publicMenuItem } from '../services/menu.js';
 
 export const opsRouter = Router();
 
@@ -64,40 +66,29 @@ opsRouter.post('/tables/:tableId/open', requireStaff({ roles: FLOOR }), async (r
   }
 });
 
+// Staff mode: a waiter orders for guests who can't or won't use their phone to order by themselves (old people, uncomfortable with tech, etc)
+const closeBody = z.object({ force: z.boolean().optional() });
+
 opsRouter.post('/sessions/:sessionId/close', requireStaff({ roles: FLOOR }), async (req, res) => {
   const id = objectId.safeParse(req.params.sessionId);
   if (!id.success) return badRequest(res, id.error.issues);
-
-  // closeSession closes it, resolves its open staff requests and tells every screen, all in one place
-  const session = await closeSession({ _id: id.data, restaurantId: req.staff.restaurantId }, 'staff');
-  if (!session) return res.status(404).json({ error: 'Open session not found', code: 'NOT_FOUND' });
-
-  res.json({ id: session._id, status: session.status });
-});
-
-// Staff mode: a waiter orders for guests who can't or won't use their phone to order by themselves (old people, uncomfortable with tech, etc)
-opsRouter.post('/sessions/:sessionId/orders', requireStaff({ roles: FLOOR }), async (req, res) => {
-  const id = objectId.safeParse(req.params.sessionId);
-  if (!id.success) return badRequest(res, id.error.issues);
-  const key = idempotencyKey.safeParse(req.get('Idempotency-Key'));
-  if (!key.success) return badRequest(res, key.error.issues);
-  const body = orderBody.safeParse(req.body);
+  const body = closeBody.safeParse(req.body ?? {}); // Express 5 leaves req.body undefined when nothing is sent
   if (!body.success) return badRequest(res, body.error.issues);
 
-  const session = await TableSession.findOne({ _id: id.data, restaurantId: req.staff.restaurantId, status: 'open' });
+  const { session, unfinished } = await closeSession(
+    { _id: id.data, restaurantId: req.staff.restaurantId },
+    'staff',
+    { force: body.data.force }
+  );
+  if (unfinished) {
+    return res.status(409).json({
+      error: `${unfinished} order(s) are still being prepared`,
+      code: 'HAS_UNFINISHED_ORDERS',
+      details: { unfinished },
+    });
+  }
   if (!session) return res.status(404).json({ error: 'Open session not found', code: 'NOT_FOUND' });
-
-  const { order, duplicate } = await createOrder({
-    restaurantId: session.restaurantId,
-    session,
-    lines: body.data.items,
-    idempotencyKey: key.data,
-    expectedTotalMinor: body.data.expectedTotalMinor,
-    placedBy: 'staff',
-    staffId: req.staff._id,
-  });
-  if (!duplicate) emitOrder(order);
-  res.status(duplicate ? 200 : 201).json(publicOrder(order));
+  res.json({ id: session._id, status: session.status });
 });
 
 // Mark an item sold out, or back in stock
@@ -238,7 +229,12 @@ opsRouter.patch('/orders/:orderId/status', requireStaff({ roles: ALL_STAFF }), a
 
 opsRouter.get('/requests', requireStaff({ roles: FLOOR }), async (req, res) => {
   const list = await StaffRequest.find({ restaurantId: req.staff.restaurantId, status: 'open' }).sort({ createdAt: 1 });
-  res.json(list.map((r) => ({ id: r._id, type: r.type, tableNumber: r.tableNumber, createdAt: r.createdAt })));
+  res.json({
+    serverTime: new Date(),
+    requests: list.map((r) => ({
+      id: r._id, type: r.type, tableNumber: r.tableNumber, status: r.status, createdAt: r.createdAt, updatedAt: r.updatedAt,
+    })),
+  });
 });
 
 opsRouter.post('/requests/:requestId/resolve', requireStaff({ roles: FLOOR }), async (req, res) => {
@@ -252,4 +248,50 @@ opsRouter.post('/requests/:requestId/resolve', requireStaff({ roles: FLOOR }), a
   if (!request) return res.status(404).json({ error: 'Open request not found', code: 'NOT_FOUND' });
   emitRequest(request);
   res.json({ id: request._id, status: request.status });
+});
+
+// Full menu for staff screens: sold-out switches and staff-mode ordering
+opsRouter.get('/menu', requireStaff({ roles: ALL_STAFF }), async (req, res) => {
+  const items = await MenuItem.find({ restaurantId: req.staff.restaurantId }).sort({ category: 1, sortOrder: 1 }).lean();
+  res.json(items.map(publicMenuItem));
+});
+
+// Everything a table ordered in one session, with the running bill
+opsRouter.get('/sessions/:sessionId/orders', requireStaff({ roles: FLOOR }), async (req, res) => {
+  const id = objectId.safeParse(req.params.sessionId);
+  if (!id.success) return badRequest(res, id.error.issues);
+  const session = await TableSession.findOne({ _id: id.data, restaurantId: req.staff.restaurantId });
+  if (!session) return res.status(404).json({ error: 'Session not found', code: 'NOT_FOUND' });
+
+  const orders = await Order.find({ sessionId: session._id }).sort({ createdAt: 1 });
+  const billMinor = orders.filter((o) => o.status !== 'cancelled').reduce((sum, o) => sum + o.totalMinor, 0);
+  res.json({
+    session: { id: session._id, tableNumber: session.tableNumber, status: session.status, openedAt: session.createdAt },
+    billMinor,
+    orders: orders.map(publicOrder),
+  });
+});
+
+// QR tokens are secrets (anyone holding one can see that table's orders), so managers only
+opsRouter.get('/tables/qr', requireStaff({ roles: MANAGERS }), async (req, res) => {
+  const tables = await Table.find({ restaurantId: req.staff.restaurantId, active: true }).sort({ number: 1 });
+  res.json(tables.map((t) => ({ id: t._id, number: t.number, qrToken: t.qrToken })));
+});
+
+// A card was stolen or photographed: give the table a new code. The old one stops working at once.
+opsRouter.post('/tables/:tableId/rotate-qr', requireStaff({ roles: MANAGERS }), async (req, res) => {
+  const id = objectId.safeParse(req.params.tableId);
+  if (!id.success) return badRequest(res, id.error.issues);
+  const table = await Table.findOne({ _id: id.data, restaurantId: req.staff.restaurantId, active: true });
+  if (!table) return res.status(404).json({ error: 'Table not found', code: 'NOT_FOUND' });
+
+  // Never while guests are seated: their phones would stop working mid-meal
+  if (await TableSession.exists({ tableId: table._id, status: 'open' })) {
+    return res.status(409).json({ error: 'Close the table before replacing its QR code', code: 'TABLE_OPEN' });
+  }
+
+  table.qrToken = randomBytes(18).toString('base64url');
+  await table.save();
+  disconnectTable(table._id);
+  res.json({ id: table._id, number: table.number, qrToken: table.qrToken });
 });

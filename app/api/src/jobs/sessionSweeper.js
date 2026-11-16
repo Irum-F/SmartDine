@@ -14,8 +14,7 @@ export async function sweepIdleSessions(idleMinutes = config.SESSION_IDLE_MINUTE
   let closed = 0;
   for (const s of stale) {
     if (await Order.exists({ sessionId: s._id, status: { $in: UNFINISHED } })) continue;
-    if (await closeSession({ _id: s._id, lastActivityAt: { $lt: cutoff } }, 'idle')) closed++;
-  }
+    if ((await closeSession({ _id: s._id, lastActivityAt: { $lt: cutoff } }, 'idle')).session) closed++;  }
   if (closed) logger.info({ closed }, 'Closed idle table sessions');
   return closed;
 }

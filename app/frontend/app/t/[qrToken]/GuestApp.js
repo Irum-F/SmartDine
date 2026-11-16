@@ -7,7 +7,7 @@ import { api, ApiError } from '../../../lib/api.js';
 import { addLine, priceCart, setQty } from '../../../lib/cart.js';
 import { formatMoney } from '../../../lib/money.js';
 import { load, save } from '../../../lib/storage.js';
-import ItemSheet from './ItemSheet.js';
+import ItemSheet from '../../../components/ItemSheet.js';
 
 const STATUS_LABEL = {
   placed: 'Sent to the kitchen',
@@ -96,6 +96,12 @@ export default function GuestApp({ qrToken }) {
     refresh();
     const url = process.env.NEXT_PUBLIC_SOCKET_URL; // only set locally
     const socket = io(url, { auth: { qrToken }, ...(url ? { transports: ['websocket'] } : {}) });
+    let retry;
+    // After a deploy the server ends connections on purpose, and Socket.IO only reconnects
+    // by itself after network drops. Reconnect at a random moment so phones don't all arrive at once.
+    socket.on('disconnect', (reason) => {
+      if (reason === 'io server disconnect') retry = setTimeout(() => socket.connect(), 1000 + Math.random() * 2000);
+    });
 
     socket.on('connect', refresh); // catch up on anything missed while disconnected
     socket.on('order:update', upsertOrder);
@@ -119,6 +125,7 @@ export default function GuestApp({ qrToken }) {
     const poll = setInterval(refresh, 30_000); // safety net if a live event is ever missed
     return () => {
       clearInterval(poll);
+      clearTimeout(retry);
       socket.disconnect();
     };
   }, [qrToken, refresh, upsertOrder]);

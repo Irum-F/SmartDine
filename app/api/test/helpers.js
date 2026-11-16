@@ -49,6 +49,10 @@ export async function seedRestaurant(slug = 'bistro') {
     restaurantId, name: 'Kiran', username: 'kiran', role: 'kitchen',
     pinHash: hashPin('482913'), mustChangePin: false,
   });
+  await Staff.create({
+    restaurantId, name: 'Mona', username: 'mona', role: 'manager',
+    pinHash: hashPin('482913'), mustChangePin: false,
+  });
   return { restaurant, table, pizza, soda };
 }
 

@@ -80,9 +80,23 @@ staffRouter.post('/logout', requireStaff({ allowPinChange: true }), async (req, 
   res.json({ ok: true });
 });
 
-staffRouter.get('/me', requireStaff({ allowPinChange: true }), (req, res) => {
-  const { name, role, mustChangePin, restaurantId } = req.staff;
-  res.json({ name, role, mustChangePin, restaurantId });
+staffRouter.get('/me', requireStaff({ roles: ['owner', 'manager', 'waiter', 'kitchen'], allowPinChange: true }), async (req, res) => {
+  const restaurant = await Restaurant.findById(req.staff.restaurantId).lean();
+  res.json({
+    id: req.staff._id,
+    name: req.staff.name,
+    username: req.staff.username,
+    role: req.staff.role,
+    mustChangePin: req.staff.mustChangePin,
+    restaurant: {
+      name: restaurant.name,
+      slug: restaurant.slug,
+      currency: restaurant.currency,
+      locale: restaurant.locale,
+      showVegSymbols: restaurant.showVegSymbols,
+      busyMode: restaurant.busyMode,
+    },
+  });
 });
 
 const WEAK_PINS = new Set(['1234', '12345', '123456', '4321', '654321', '1111', '0000']);

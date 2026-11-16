@@ -12,6 +12,7 @@ import { isOpenNow } from '../lib/hours.js';
 import { createOrder, publicOrder } from '../services/orders.js';
 import { objectId, idempotencyKey, orderBody, badRequest } from '../lib/validation.js';
 import { randomUUID } from 'node:crypto';
+import { publicMenuItem } from '../services/menu.js';
 import { emitOrder, emitRequest } from '../realtime/events.js';
 
 const DEVICE_COOKIE = 'sd_device';
@@ -75,17 +76,7 @@ guestRouter.get('/:qrToken', loadTable, async (req, res) => {
     },
     table: { number: table.number },
     sessionOpen: Boolean(session),
-    menu: items.map((i) => ({
-      id: i._id,
-      name: i.name,
-      description: i.description,
-      category: i.category,
-      priceMinor: i.priceMinor,
-      dietary: i.dietary,
-      variants: i.variants,
-      modifierGroups: i.modifierGroups,
-      available: i.available,
-    })),
+    menu: items.map(publicMenuItem),
   });
 });
 
