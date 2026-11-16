@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import Sheet from '../../../components/Sheet.js';
-import { choiceError, unitPrice } from '../../../lib/cart.js';
+import Sheet from './Sheet.js';
+import { choiceError, unitPrice } from '../lib/cart.js';
 
 export default function ItemSheet({ item, money, onAdd, onClose }) {
   const [variantName, setVariantName] = useState(item.variants[0]?.name);

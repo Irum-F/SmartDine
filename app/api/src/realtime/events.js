@@ -61,3 +61,8 @@ export function emitSessionClosed(session) {
 export function disconnectStaff(staffId) {
   if (io) io.in(rooms.staff(staffId)).disconnectSockets(true);
 }
+
+// A table's QR code was replaced: drop anyone still connected with the old code
+export function disconnectTable(tableId) {
+  if (io) io.in(rooms.table(tableId)).disconnectSockets(true);
+}
