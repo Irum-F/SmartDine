@@ -295,3 +295,27 @@ opsRouter.post('/tables/:tableId/rotate-qr', requireStaff({ roles: MANAGERS }), 
   disconnectTable(table._id);
   res.json({ id: table._id, number: table.number, qrToken: table.qrToken });
 });
+// Staff mode: a waiter orders for guests who can't or won't use their phone
+opsRouter.post('/sessions/:sessionId/orders', requireStaff({ roles: FLOOR }), async (req, res) => {
+  const id = objectId.safeParse(req.params.sessionId);
+  if (!id.success) return badRequest(res, id.error.issues);
+  const key = idempotencyKey.safeParse(req.get('Idempotency-Key'));
+  if (!key.success) return badRequest(res, key.error.issues);
+  const body = orderBody.safeParse(req.body);
+  if (!body.success) return badRequest(res, body.error.issues);
+
+  const session = await TableSession.findOne({ _id: id.data, restaurantId: req.staff.restaurantId, status: 'open' });
+  if (!session) return res.status(404).json({ error: 'Open session not found', code: 'NOT_FOUND' });
+
+  const { order, duplicate } = await createOrder({
+    restaurantId: session.restaurantId,
+    session,
+    lines: body.data.items,
+    idempotencyKey: key.data,
+    expectedTotalMinor: body.data.expectedTotalMinor,
+    placedBy: 'staff',
+    staffId: req.staff._id,
+  });
+  if (!duplicate) emitOrder(order);
+  res.status(duplicate ? 200 : 201).json(publicOrder(order));
+});

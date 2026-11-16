@@ -87,3 +87,21 @@ test('a replaced QR code stops working, and only a closed table can be replaced'
   assert.equal((await request(app).get(`/api/t/${fx.table.qrToken}`)).status, 404);
   assert.equal((await request(app).get(`/api/t/${rotated.body.qrToken}`)).status, 200);
 });
+
+test('staff can order for an open table, and a retry does not double it', async () => {
+  const fx = await seedRestaurant();
+  const { waiter, sessionId } = await openTable(fx);
+  const key = randomUUID();
+  const send = () =>
+    waiter
+      .post(`/api/ops/sessions/${sessionId}/orders`)
+      .set('Idempotency-Key', key)
+      .send({ items: [{ menuItemId: String(fx.soda._id), qty: 1 }], expectedTotalMinor: 9900 });
+
+  const first = await send();
+  const retry = await send();
+  assert.equal(first.status, 201);
+  assert.equal(first.body.placedBy, 'staff');
+  assert.equal(retry.status, 200);
+  assert.equal(retry.body.id, first.body.id);
+});
