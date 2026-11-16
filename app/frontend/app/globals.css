@@ -176,6 +176,10 @@ textarea { width: 100%; margin-top: 8px; font: inherit; padding: 10px 12px; bord
 .qr-table { font-size: 26px; font-weight: 800; }
 .qr-hint { font-size: 14px; color: #6b645a; }
 
+/* QR cards are always light (they're made for printing), so their buttons must be light too */
+.qr-card .btn { background: #ffffff; color: #1c1914; border-color: #d9cfbf; }
+.qr-card .btn.danger { color: #9b2c22; border-color: #9b2c22; }
+
 @media print {
   .no-print, .staff-top { display: none !important; }
   body { background: #fff; }
