@@ -20,7 +20,7 @@ jobs:
       matrix:
         service: [frontend, api, notifier]
     concurrency:
-      group: terraform-prod
+      group: deploy-${{ matrix.service }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
