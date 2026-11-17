@@ -66,6 +66,7 @@ export default function KitchenPage() {
       },
       'menu:availability': ({ id, available }) => setMenu((m) => m.map((i) => (i.id === id ? { ...i, available } : i))),
       'restaurant:busy': ({ busyMode: on }) => setBusyMode(on),
+      'config:changed': () => setTimeout(sync, Math.random() * 2000),
     },
   });
 

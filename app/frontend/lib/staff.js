@@ -7,7 +7,11 @@ import { api, ApiError } from './api.js';
 
 export const ROLE_HOME = { owner: '/staff/floor', manager: '/staff/floor', waiter: '/staff/floor', kitchen: '/staff/kitchen' };
 
-export const errorText = (err) => (err instanceof ApiError ? err.message : 'Connection problem. Please try again.');
+export const errorText = (err) => {
+  if (!(err instanceof ApiError)) return 'Connection problem. Please try again.';
+  const issue = Array.isArray(err.details) ? err.details[0] : null;
+  return issue?.message ? issue.message : err.message;
+};
 const isAuthError = (err) => err instanceof ApiError && (err.status === 401 || err.status === 403);
 
 // Loads the signed-in staff member, and sends them elsewhere if they can't use this screen

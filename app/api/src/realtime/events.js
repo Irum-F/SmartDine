@@ -66,3 +66,8 @@ export function disconnectStaff(staffId) {
 export function disconnectTable(tableId) {
   if (io) io.in(rooms.table(tableId)).disconnectSockets(true);
 }
+
+// Menu, tables or settings changed: every open screen of this restaurant reloads its data
+export function emitConfigChanged(restaurantId) {
+  send([rooms.menu(restaurantId), rooms.kitchen(restaurantId), rooms.floor(restaurantId)], 'config:changed', {});
+}

@@ -10,12 +10,15 @@ const restaurantSchema = new mongoose.Schema(
     showVegSymbols: { type: Boolean, default: true },      // green/red veg and non-veg markers
     busyMode: { type: Boolean, default: false }, 
     // Empty = always open. Overnight hours work too, e.g. { day: 5, open: '18:00', close: '02:00' }
+    categories: { type: [String], default: [] },       
+
     openingHours: [
       {
         _id: false,
         day: { type: Number, min: 0, max: 6, required: true }, // 0 = Sunday
         open: { type: String, match: /^\d{2}:\d{2}$/, required: true },
         close: { type: String, match: /^\d{2}:\d{2}$/, required: true },
+        // Order categories appear in. Categories not listed here come after, alphabetically.
       },
     ],          // pauses QR ordering when the kitchen is overwhelmed
   },

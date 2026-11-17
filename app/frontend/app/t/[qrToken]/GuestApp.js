@@ -102,7 +102,8 @@ export default function GuestApp({ qrToken }) {
     socket.on('disconnect', (reason) => {
       if (reason === 'io server disconnect') retry = setTimeout(() => socket.connect(), 1000 + Math.random() * 2000);
     });
-
+    // A manager changed the menu or settings: reload at a random moment in the next 2 seconds
+    socket.on('config:changed', () => setTimeout(refresh, Math.random() * 2000));
     socket.on('connect', refresh); // catch up on anything missed while disconnected
     socket.on('order:update', upsertOrder);
     socket.on('menu:availability', ({ id, available }) =>

@@ -37,7 +37,7 @@ const menuItemSchema = new mongoose.Schema(
     description: { type: String, default: '', maxlength: 300 },
     priceMinor: { type: Number, required: true, min: 0, validate: wholeNumber },
     category: { type: String, required: true, trim: true },
-    dietary: [{ type: String, enum: DIETARY_TAGS }],
+    dietary: [{ type: String, enum: ['veg', 'non-veg', 'egg', 'vegan', 'spicy', 'contains-nuts', 'gluten-free'] }],
     variants: { type: [variantSchema], default: [] },
     modifierGroups: { type: [modifierGroupSchema], default: [] },
     imageKey: { type: String },
