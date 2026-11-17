@@ -12,7 +12,7 @@ import { isOpenNow } from '../lib/hours.js';
 import { createOrder, publicOrder } from '../services/orders.js';
 import { objectId, idempotencyKey, orderBody, badRequest } from '../lib/validation.js';
 import { randomUUID } from 'node:crypto';
-import { publicMenuItem } from '../services/menu.js';
+import { publicMenuItem, sortMenu } from '../services/menu.js';
 import { emitOrder, emitRequest } from '../realtime/events.js';
 
 const DEVICE_COOKIE = 'sd_device';
@@ -61,7 +61,7 @@ guestRouter.get('/:qrToken', loadTable, async (req, res) => {
   const { restaurant, table } = req;
   const [session, items] = await Promise.all([
     findOpenSession(table),
-    MenuItem.find({ restaurantId: restaurant._id }).sort({ category: 1, sortOrder: 1 }).lean(),
+    MenuItem.find({ restaurantId: restaurant._id }).lean(),
     deviceId(req, res),
   ]);
 
@@ -76,7 +76,7 @@ guestRouter.get('/:qrToken', loadTable, async (req, res) => {
     },
     table: { number: table.number },
     sessionOpen: Boolean(session),
-    menu: items.map(publicMenuItem),
+    menu: sortMenu(items, restaurant.categories).map(publicMenuItem),
   });
 });
 

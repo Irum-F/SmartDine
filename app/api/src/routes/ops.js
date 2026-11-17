@@ -15,7 +15,8 @@ import { requireStaff } from '../middleware/requireStaff.js';
 import { createOrder, publicOrder } from '../services/orders.js';
 import { objectId, idempotencyKey, orderBody, badRequest } from '../lib/validation.js';
 import { randomBytes } from 'node:crypto';
-import { publicMenuItem } from '../services/menu.js';
+import { publicMenuItem, sortMenu } from '../services/menu.js';
+import { audit } from '../services/audit.js';
 
 export const opsRouter = Router();
 
@@ -88,6 +89,7 @@ opsRouter.post('/sessions/:sessionId/close', requireStaff({ roles: FLOOR }), asy
     });
   }
   if (!session) return res.status(404).json({ error: 'Open session not found', code: 'NOT_FOUND' });
+  if (body.data.force) await audit(req, 'table.force-close', `Closed table ${session.tableNumber} and cancelled its unfinished orders`);
   res.json({ id: session._id, status: session.status });
 });
 
@@ -107,6 +109,7 @@ opsRouter.patch('/menu-items/:itemId/availability', requireStaff({ roles: MENU_A
   );
   if (!item) return res.status(404).json({ error: 'Menu item not found', code: 'NOT_FOUND' });
   emitAvailability(item);
+  await audit(req, 'menu.availability', `${item.available ? 'Back in stock' : 'Marked sold out'}: "${item.name}"`);
   res.json({ id: item._id, available: item.available });
 });
 
@@ -122,6 +125,7 @@ opsRouter.patch('/restaurant/busy-mode', requireStaff({ roles: MANAGERS }), asyn
     { new: true }
   );
   emitBusy(restaurant);
+  await audit(req, 'restaurant.busy', restaurant.busyMode ? 'Paused QR ordering (busy mode on)' : 'Resumed QR ordering');
   res.json({ busyMode: restaurant.busyMode });
 });
 
@@ -252,8 +256,11 @@ opsRouter.post('/requests/:requestId/resolve', requireStaff({ roles: FLOOR }), a
 
 // Full menu for staff screens: sold-out switches and staff-mode ordering
 opsRouter.get('/menu', requireStaff({ roles: ALL_STAFF }), async (req, res) => {
-  const items = await MenuItem.find({ restaurantId: req.staff.restaurantId }).sort({ category: 1, sortOrder: 1 }).lean();
-  res.json(items.map(publicMenuItem));
+  const [restaurant, items] = await Promise.all([
+    Restaurant.findById(req.staff.restaurantId).lean(),
+    MenuItem.find({ restaurantId: req.staff.restaurantId }).lean(),
+  ]);
+  res.json(sortMenu(items, restaurant.categories).map(publicMenuItem));
 });
 
 // Everything a table ordered in one session, with the running bill
@@ -293,5 +300,6 @@ opsRouter.post('/tables/:tableId/rotate-qr', requireStaff({ roles: MANAGERS }), 
   table.qrToken = randomBytes(18).toString('base64url');
   await table.save();
   disconnectTable(table._id);
+  await audit(req, 'table.rotate-qr', `Replaced the QR code for table ${table.number}`);
   res.json({ id: table._id, number: table.number, qrToken: table.qrToken });
 });

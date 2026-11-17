@@ -30,7 +30,7 @@ export default function LoginPage() {
     setError(null);
     const restaurantSlug = form.restaurantSlug.trim().toLowerCase();
     try {
-      await api('/staff/login', { method: 'POST', body: { restaurantSlug, username: form.username.trim(), pin: form.pin } });
+      await api('/staff/login', { method: 'POST', body: { restaurantSlug, username: form.username.trim().toLowerCase(), pin: form.pin } });
       save('sd_staff_restaurant', restaurantSlug);
       const me = await api('/staff/me');
       router.replace(me.mustChangePin ? '/staff/change-pin' : ROLE_HOME[me.role]);
