@@ -4,6 +4,8 @@ import { useState } from 'react';
 import Sheet from '../Sheet.js';
 import { fromMinor, toMinor } from '../../lib/money.js';
 import { errorText } from '../../lib/staff.js';
+import { ApiError } from '../../lib/api.js';
+import { prepareImage } from '../../lib/image.js';
 
 const DIETARY = [
   ['veg', 'Vegetarian'],
@@ -18,6 +20,7 @@ const DIETARY = [
 const newGroup = () => ({ name: '', minSelect: 0, maxSelect: 1, options: [{ name: '', price: '' }] });
 
 function toForm(item) {
+  export default function MenuItemEditor({ item, categories, call, onSave, onDelete, onClose, onPhotoChange }) {
   return {
     name: item.name ?? '',
     description: item.description ?? '',
@@ -70,6 +73,44 @@ export default function MenuItemEditor({ item, categories, onSave, onDelete, onC
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const isNew = !item.id;
+  const [photo, setPhoto] = useState(item.photo ?? null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+
+  async function uploadPhoto(file) {
+    setPhotoBusy(true);
+    setError(null);
+    try {
+      const blob = await prepareImage(file);
+      // 1. Permission to upload one file, straight to S3
+      const ticket = await call(`/admin/menu/${item.id}/photo-upload`, { method: 'POST', body: { contentType: blob.type } });
+      const form = new FormData();
+      Object.entries(ticket.fields).forEach(([k, v]) => form.append(k, v));
+      form.append('file', blob); // S3 requires the file to be the last field
+      const res = await fetch(ticket.url, { method: 'POST', body: form });
+      if (!res.ok) throw new Error(res.status === 400 ? 'The photo is too large (max 5 MB).' : 'Upload failed. Please try again.');
+      // 2. The API checks it, makes the sizes and attaches it to the item
+      const updated = await call(`/admin/menu/${item.id}/photo`, { method: 'POST', body: { key: ticket.key } });
+      setPhoto(updated.photo);
+      onPhotoChange();
+    } catch (err) {
+      setError(err instanceof ApiError ? errorText(err) : err.message);
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
+  async function removePhoto() {
+    setPhotoBusy(true);
+    try {
+      await call(`/admin/menu/${item.id}/photo`, { method: 'DELETE' });
+      setPhoto(null);
+      onPhotoChange();
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
 
   const field = (key) => (e) => setF((s) => ({ ...s, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
   const setVariant = (i, key, value) => setF((s) => ({ ...s, variants: s.variants.map((v, n) => (n === i ? { ...v, [key]: value } : v)) }));
@@ -161,6 +202,36 @@ export default function MenuItemEditor({ item, categories, onSave, onDelete, onC
 
       <div className="box">
         <h3>Sizes</h3>
+      <div className="box">
+        <h3>Photo</h3>
+        {isNew ? (
+          <p className="hint">Save the item first, then add a photo.</p>
+        ) : (
+          <>
+            {photo && <img className="item-photo" src={photo.large} alt="" width={photo.width} height={photo.height} />}
+            <div className="row">
+              <label className={`btn small ${photoBusy ? 'disabled' : ''}`}>
+                {photoBusy ? 'Working…' : photo ? 'Replace photo' : 'Add photo'}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                  hidden
+                  disabled={photoBusy}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = ''; // lets the same file be picked again
+                    if (file) uploadPhoto(file);
+                  }}
+                />
+              </label>
+              {photo && (
+                <button className="btn small" disabled={photoBusy} onClick={removePhoto}>Remove photo</button>
+              )}
+            </div>
+            <p className="hint">Large photos are shrunk on your device before uploading. Photos appear on guests' menus within seconds.</p>
+          </>
+        )}
+      </div>
         {f.variants.length === 0 ? (
           <label className="field">
             Price (₹)

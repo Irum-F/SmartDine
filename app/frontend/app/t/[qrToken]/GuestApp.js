@@ -310,18 +310,21 @@ export default function GuestApp({ qrToken }) {
               return (
                 <li key={item.id}>
                   <button className="item" disabled={!item.available} onClick={() => setSheetItem(item)}>
-                    <span>
-                      <span className="item-name">
-                        {r.showVegSymbols && <DietMark dietary={item.dietary} />}
-                        {item.name}
+                    <span className="item-main">
+                      {item.photo && <img className="thumb" src={item.photo.small} alt="" loading="lazy" width={72} height={72} />}
+                      <span>
+                        <span className="item-name">
+                          {r.showVegSymbols && <DietMark dietary={item.dietary} />}
+                          {item.name}
+                        </span>
+                        {item.description && <span className="item-desc">{item.description}</span>}
                       </span>
-                      {item.description && <span className="item-desc">{item.description}</span>}
                     </span>
                     <span className="price">
                       {item.available ? `${item.variants.length ? 'from ' : ''}${money(from)}` : <span className="tag">Sold out</span>}
                     </span>
                   </button>
-                </li>
+               </li>
               );
             })}
           </ul>

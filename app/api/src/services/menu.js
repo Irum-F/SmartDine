@@ -1,3 +1,12 @@
+// Keys start with "media/", and CloudFront sends /media/* to the bucket, so the key is the URL path
+function publicPhoto(photo) {
+  const v = photo?.variants;
+  if (!v?.length) return null;
+  const small = v[0];
+  const large = v[v.length - 1];
+  return { small: `/${small.key}`, large: `/${large.key}`, width: large.width, height: large.height };
+}
+
 export function publicMenuItem(i) {
   return {
     id: i._id,
@@ -9,6 +18,7 @@ export function publicMenuItem(i) {
     variants: i.variants,
     modifierGroups: i.modifierGroups,
     available: i.available,
+    photo: publicPhoto(i.photo),
   };
 }
 
