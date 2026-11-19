@@ -12,6 +12,7 @@ export default function QrPage() {
   const [tables, setTables] = useState([]);
   const [images, setImages] = useState({});
   const [confirmId, setConfirmId] = useState(null);
+  const [copiedId, setCopiedId] = useState(null);
   const [notice, setNotice] = useState(null);
 
   const load = useCallback(async () => {
@@ -26,13 +27,15 @@ export default function QrPage() {
     if (me) load();
   }, [me, load]);
 
+  const tableUrl = (t) => `${window.location.origin}/t/${t.qrToken}`;
+
   // Each code holds this site's address plus the table's token
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const out = {};
       for (const t of tables) {
-        out[t.id] = await QRCode.toDataURL(`${window.location.origin}/t/${t.qrToken}`, { errorCorrectionLevel: 'M', margin: 1, width: 600 });
+        out[t.id] = await QRCode.toDataURL(tableUrl(t), { errorCorrectionLevel: 'M', margin: 1, width: 600 });
       }
       if (!cancelled) setImages(out);
     })();
@@ -40,6 +43,17 @@ export default function QrPage() {
       cancelled = true;
     };
   }, [tables]);
+
+  async function copyLink(t) {
+    try {
+      await navigator.clipboard.writeText(tableUrl(t));
+      setCopiedId(t.id);
+      setTimeout(() => setCopiedId((c) => (c === t.id ? null : c)), 2000);
+    } catch {
+      // Clipboard blocked (some browsers or settings): show the link so it can be copied by hand
+      window.prompt(`Link for table ${t.number}`, tableUrl(t));
+    }
+  }
 
   async function rotate(table) {
     try {
@@ -75,7 +89,13 @@ export default function QrPage() {
             <div className="qr-table">Table {t.number}</div>
             {images[t.id] ? <img src={images[t.id]} alt={`QR code for table ${t.number}`} /> : <p className="qr-hint">Generating…</p>}
             <div className="qr-hint">Scan with your phone camera to see the menu and order</div>
-            <div className="no-print" style={{ marginTop: 12 }}>
+            <div className="no-print row" style={{ justifyContent: 'center', marginTop: 12 }}>
+              <button className="btn small" onClick={() => copyLink(t)}>
+                {copiedId === t.id ? 'Copied ✓' : 'Copy link'}
+              </button>
+              <a className="btn small" href={`/t/${t.qrToken}`} target="_blank" rel="noopener noreferrer">
+                Open
+              </a>
               {confirmId === t.id ? (
                 <button className="btn small danger" onClick={() => rotate(t)}>Confirm: the old card stops working</button>
               ) : (

@@ -9,6 +9,7 @@ export default function ItemSheet({ item, money, onAdd, onClose }) {
   const [modifiers, setModifiers] = useState([]);
   const [qty, setQty] = useState(1);
   const [notes, setNotes] = useState('');
+  const [zoomed, setZoomed] = useState(false); // full-screen photo
 
   const isChosen = (group, option) => modifiers.some((m) => m.group === group.name && m.option === option.name);
 
@@ -47,6 +48,18 @@ export default function ItemSheet({ item, money, onAdd, onClose }) {
         </div>
       }
     >
+      {/* Large photo at the top of the sheet; tap it to see the whole photo full screen */}
+      {item.photo && (
+        <button className="photo-button" onClick={() => setZoomed(true)} aria-label={`View a larger photo of ${item.name}`}>
+          <img className="item-photo" src={item.photo.large} alt={item.name} width={item.photo.width} height={item.photo.height} />
+        </button>
+      )}
+      {zoomed && (
+        <div className="lightbox" onClick={() => setZoomed(false)} role="dialog" aria-label={`${item.name} photo`}>
+          <img src={item.photo.large} alt={item.name} />
+        </div>
+      )}
+
       {item.description && <p className="muted">{item.description}</p>}
 
       {item.variants.length > 0 && (
