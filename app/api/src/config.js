@@ -8,6 +8,10 @@ const schema = z.object({
   REDIS_URL: z.string().url().optional(),        // unset = single-container mode (tests, quick local runs)
   APP_ORIGIN: z.string().url().optional(),       // e.g. https://smartdine.lab.irum.dev
   SESSION_IDLE_MINUTES: z.coerce.number().int().min(30).default(240),
+  MEDIA_BUCKET: z.string().min(3).optional(), // unset = photos switched off (local runs, tests)
+  AWS_REGION: z.string().default('ap-south-1'),
+  // Proxies in front of the API: 1 = load balancer only, 2 = CloudFront + load balancer
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(1),
 });
 
 const parsed = schema.safeParse(process.env);

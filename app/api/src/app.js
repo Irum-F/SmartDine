@@ -8,13 +8,15 @@ import pinoHttp from 'pino-http';
 import { logger } from './logger.js';
 import { healthRouter } from './routes/health.js';
 import { adminRouter } from './routes/admin.js';
+import { config } from './config.js';
 
 
 export function createApp() {
   const app = express();
   app.disable('x-powered-by');
-  app.set('trust proxy', 1); // behind the ALB: use the real client IP for rate limiting
-  app.use(express.json({ limit: '100kb' }));
+  // Each proxy adds the address it received the request from. Trusting exactly the proxies we run
+  // gives the visitor's real IP, so rate limits count people, not CloudFront servers.
+  app.set('trust proxy', config.TRUST_PROXY_HOPS);  app.use(express.json({ limit: '100kb' }));
   app.use(cookieParser());
   app.use(
     pinoHttp({

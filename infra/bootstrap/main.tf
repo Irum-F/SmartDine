@@ -11,6 +11,9 @@ provider "aws" {
   region = var.region
 }
 
+# Looks up the AWS account these credentials belong to. Read-only: creates nothing.
+data "aws_caller_identity" "current" {}
+
 variable "github_owner_id" {
   type        = string
   description = "Numeric GitHub account ID"
@@ -179,4 +182,90 @@ output "mongodb_secret_arn" { value = aws_secretsmanager_secret.mongodb_uri.arn 
 resource "aws_secretsmanager_secret" "jwt" {
   name        = "${var.project}/jwt-secret"
   description = "Signing key for SmartDine staff login tokens"
+}
+
+# Menu photos. Lives here, not in prod, so photos survive the destroy pipeline (like the database does).
+resource "aws_s3_bucket" "media" {
+  bucket = "smartdine-media-${data.aws_caller_identity.current.account_id}"
+}
+
+resource "aws_s3_bucket_public_access_block" "media" {
+  bucket                  = aws_s3_bucket.media.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_ownership_controls" "media" {
+  bucket = aws_s3_bucket.media.id
+  rule {
+    object_ownership = "BucketOwnerEnforced"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "media" {
+  bucket = aws_s3_bucket.media.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256" # CloudFront can read this without extra KMS permissions
+    }
+  }
+}
+
+# Versioning gives a 30-day undo for a deleted or replaced photo
+resource "aws_s3_bucket_versioning" "media" {
+  bucket = aws_s3_bucket.media.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "media" {
+  bucket = aws_s3_bucket.media.id
+
+  rule {
+    id     = "abandoned-uploads"
+    status = "Enabled"
+    filter {
+      prefix = "uploads/"
+    }
+    expiration {
+      days = 1
+    }
+    noncurrent_version_expiration {
+      noncurrent_days = 1
+    }
+  }
+
+  rule {
+    id     = "old-photo-versions"
+    status = "Enabled"
+    filter {
+      prefix = "media/"
+    }
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+  }
+
+  rule {
+    id     = "unfinished-multipart"
+    status = "Enabled"
+    filter {}
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+}
+
+# Browsers upload photos straight to S3, so S3 must accept requests from the app's site
+resource "aws_s3_bucket_cors_configuration" "media" {
+  bucket = aws_s3_bucket.media.id
+  cors_rule {
+    allowed_methods = ["POST"]
+    allowed_origins = var.media_upload_origins
+    allowed_headers = ["*"]
+    max_age_seconds = 3000
+  }
 }

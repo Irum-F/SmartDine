@@ -30,6 +30,9 @@ const modifierGroupSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const photoVariantSchema = new mongoose.Schema({ key: String, width: Number, height: Number }, { _id: false });
+const photoSchema = new mongoose.Schema({ variants: [photoVariantSchema], updatedAt: Date }, { _id: false });
+
 const menuItemSchema = new mongoose.Schema(
   {
     restaurantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Restaurant', required: true },
@@ -43,6 +46,7 @@ const menuItemSchema = new mongoose.Schema(
     imageKey: { type: String },
     available: { type: Boolean, default: true },
     sortOrder: { type: Number, default: 0 },
+    photo: { type: photoSchema, default: undefined },
   },
   { timestamps: true }
 );

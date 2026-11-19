@@ -76,6 +76,12 @@ export default function AdminMenuPage() {
                 <button className="item" onClick={() => setEditing(i)}>
                   <span>
                     <span className="item-name">{i.name}</span>
+                    <span className="item-main">
+                    {i.photo && <img className="thumb" src={i.photo.small} alt="" loading="lazy" width={56} height={56} />}
+                    <span>
+                      {/* existing item-name and item-desc spans, unchanged */}
+                    </span>
+                  </span>
                     <span className="item-desc">
                       {[i.variants.length && `${i.variants.length} sizes`, i.modifierGroups.length && `${i.modifierGroups.length} add-on groups`, i.dietary.join(', ')]
                         .filter(Boolean)
@@ -99,6 +105,8 @@ export default function AdminMenuPage() {
           onSave={save}
           onDelete={remove}
           onClose={() => setEditing(null)}
+          call={call}
+          onPhotoChange={load}
         />
       )}
     </AdminFrame>

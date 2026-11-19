@@ -13,6 +13,7 @@ import { badRequest, objectId } from '../lib/validation.js';
 import { audit } from '../services/audit.js';
 import { publicMenuItem, sortMenu } from '../services/menu.js';
 import { disconnectStaff, disconnectTable, emitConfigChanged } from '../realtime/events.js';
+import { MAX_UPLOAD_BYTES, MediaError, createUpload, deleteKeys, finishUpload, photosEnabled } from '../services/media.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireStaff({ roles: ['owner', 'manager'] })); // every route below is managers only
@@ -129,9 +130,82 @@ adminRouter.delete('/menu/:itemId', async (req, res) => {
   if (!id) return;
   const item = await MenuItem.findOneAndDelete({ _id: id, restaurantId: req.staff.restaurantId });
   if (!item) return notFound(res, 'Menu item');
+  await deleteKeys(item.photo?.variants?.map((v) => v.key) ?? []).catch((err) => req.log.warn({ err }, 'Photo cleanup failed'));
   await audit(req, 'menu.delete', `Deleted "${item.name}"`, { itemId: item._id });
   emitConfigChanged(req.staff.restaurantId);
   res.json({ id: item._id, deleted: true });
+});
+
+/* ------------------------------ Photos ------------------------------ */
+
+const uploadBody = z.object({ contentType: z.enum(['image/jpeg', 'image/png', 'image/webp']) });
+const photoBody = z.object({ key: z.string().min(10).max(300) });
+
+function photosReady(res) {
+  if (photosEnabled()) return true;
+  res.status(503).json({ error: "Photos aren't set up on this server", code: 'PHOTOS_DISABLED' });
+  return false;
+}
+
+// Step 1: the browser asks for permission to upload one photo
+adminRouter.post('/menu/:itemId/photo-upload', async (req, res) => {
+  if (!photosReady(res)) return;
+  const id = idParam(req, res, 'itemId');
+  if (!id) return;
+  const body = uploadBody.safeParse(req.body);
+  if (!body.success) return badRequest(res, body.error.issues);
+  if (!(await MenuItem.exists({ _id: id, restaurantId: req.staff.restaurantId }))) return notFound(res, 'Menu item');
+
+  const upload = await createUpload({ restaurantId: String(req.staff.restaurantId), itemId: id, contentType: body.data.contentType });
+  res.json({ ...upload, maxBytes: MAX_UPLOAD_BYTES });
+});
+
+// Step 2: after uploading to S3, the browser asks the API to check, resize and attach it
+adminRouter.post('/menu/:itemId/photo', async (req, res) => {
+  if (!photosReady(res)) return;
+  const id = idParam(req, res, 'itemId');
+  if (!id) return;
+  const body = photoBody.safeParse(req.body);
+  if (!body.success) return badRequest(res, body.error.issues);
+
+  const restaurantId = req.staff.restaurantId;
+  const item = await MenuItem.findOne({ _id: id, restaurantId });
+  if (!item) return notFound(res, 'Menu item');
+
+  let variants;
+  try {
+    variants = await finishUpload({ key: body.data.key, restaurantId: String(restaurantId), itemId: id });
+  } catch (err) {
+    if (err instanceof MediaError) return res.status(400).json({ error: err.message, code: err.code });
+    throw err;
+  }
+
+  const oldKeys = item.photo?.variants?.map((v) => v.key) ?? [];
+  item.photo = { variants, updatedAt: new Date() };
+  await item.save();
+  // Uploading the same photo again produces the same names, so never delete what was just written
+  await deleteKeys(oldKeys.filter((k) => !variants.some((v) => v.key === k))).catch((err) => req.log.warn({ err }, 'Old photo cleanup failed'));
+
+  await audit(req, 'menu.photo', `Updated the photo of "${item.name}"`, { itemId: item._id });
+  emitConfigChanged(restaurantId);
+  res.json({ ...publicMenuItem(item), sortOrder: item.sortOrder });
+});
+
+adminRouter.delete('/menu/:itemId/photo', async (req, res) => {
+  if (!photosReady(res)) return;
+  const id = idParam(req, res, 'itemId');
+  if (!id) return;
+  const item = await MenuItem.findOne({ _id: id, restaurantId: req.staff.restaurantId });
+  if (!item) return notFound(res, 'Menu item');
+
+  const keys = item.photo?.variants?.map((v) => v.key) ?? [];
+  item.photo = undefined;
+  await item.save();
+  await deleteKeys(keys).catch((err) => req.log.warn({ err }, 'Photo cleanup failed'));
+
+  await audit(req, 'menu.photo', `Removed the photo of "${item.name}"`, { itemId: item._id });
+  emitConfigChanged(req.staff.restaurantId);
+  res.json({ ...publicMenuItem(item), sortOrder: item.sortOrder });
 });
 
 /* ------------------------------ Staff ------------------------------ */
