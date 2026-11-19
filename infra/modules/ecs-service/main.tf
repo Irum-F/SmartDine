@@ -89,6 +89,16 @@ resource "aws_lb_listener_rule" "this" {
   condition {
     path_pattern { values = var.path_patterns }
   }
+
+  dynamic "condition" {
+    for_each = var.origin_secret == null ? [] : [1]
+    content {
+      http_header {
+        http_header_name = "X-Origin-Verify"
+        values           = [var.origin_secret]
+      }
+    }
+  }
 }
 
 resource "aws_ecs_task_definition" "this" {
@@ -164,4 +174,11 @@ resource "aws_iam_role_policy" "read_secrets" {
       Resource = values(var.secrets)
     }]
   })
+}
+
+resource "aws_iam_role_policy" "task_extra" {
+  count  = var.task_role_policy_json == null ? 0 : 1
+  name   = "${var.name}-app"
+  role   = aws_iam_role.task.id # ← your module's task role resource name
+  policy = var.task_role_policy_json
 }
