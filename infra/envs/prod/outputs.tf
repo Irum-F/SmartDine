@@ -5,3 +5,7 @@ output "zone_id" { value = data.aws_route53_zone.main.zone_id }
 
 output "app_url" { value = "https://${var.domain}" }
 output "api_security_group_id" { value = module.api.security_group_id }
+
+output "cloudfront_domain" {
+  value = aws_cloudfront_distribution.this.domain_name
+}

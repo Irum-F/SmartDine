@@ -54,3 +54,16 @@ variable "sticky_sessions" {
   type    = bool
   default = false
 }
+
+variable "origin_secret" {
+  description = "If set, only requests carrying this X-Origin-Verify header are routed to the service"
+  type        = string
+  default     = null
+  sensitive   = true
+}
+
+variable "task_role_policy_json" {
+  description = "Extra permissions for the app itself (not for starting the container)"
+  type        = string
+  default     = null
+}

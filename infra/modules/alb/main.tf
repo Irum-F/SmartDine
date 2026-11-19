@@ -14,20 +14,28 @@ resource "aws_security_group" "alb" {
   description = "Public HTTP and HTTPS to the load balancer"
   vpc_id      = var.vpc_id
 
-  ingress {
-    description = "HTTP, redirected to HTTPS"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+  # Open to the internet only when nothing sits in front (the old setup)
+  dynamic "ingress" {
+    for_each = length(var.ingress_prefix_list_ids) == 0 ? [80, 443] : []
+    content {
+      description = "Public ${ingress.value}"
+      from_port   = ingress.value
+      to_port     = ingress.value
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
   }
 
-  ingress {
-    description = "HTTPS"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+  # Behind CloudFront: only CloudFront's edge servers, HTTPS only (CloudFront handles the HTTP→HTTPS redirect)
+  dynamic "ingress" {
+    for_each = length(var.ingress_prefix_list_ids) > 0 ? [443] : []
+    content {
+      description     = "HTTPS from CloudFront only"
+      from_port       = 443
+      to_port         = 443
+      protocol        = "tcp"
+      prefix_list_ids = var.ingress_prefix_list_ids
+    }
   }
 
   egress {
@@ -76,8 +84,8 @@ resource "aws_lb_listener" "https" {
     type = "fixed-response"
     fixed_response {
       content_type = "text/plain"
-      message_body = "SmartDine is coming soon"
-      status_code  = "200"
+      message_body = "Forbidden"
+      status_code  = "403"
     }
   }
 }
