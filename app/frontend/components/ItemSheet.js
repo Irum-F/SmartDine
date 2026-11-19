@@ -28,7 +28,6 @@ export default function ItemSheet({ item, money, onAdd, onClose }) {
 
   return (
     <Sheet
-      {item.photo && <img className="item-photo" src={item.photo.large} alt={item.name} width={item.photo.width} height={item.photo.height} />}
       title={item.name}
       onClose={onClose}
       footer={
@@ -43,6 +42,8 @@ export default function ItemSheet({ item, money, onAdd, onClose }) {
             disabled={Boolean(error)}
             onClick={() => onAdd({ menuItemId: item.id, variantName, modifiers, qty, notes: notes.trim() })}
           >
+            {item.photo && <img className="item-photo" src={item.photo.large} alt={item.name} width={item.photo.width} height={item.photo.height} />}
+            {item.description && <p className="muted">{item.description}</p>}
             {error ?? `Add · ${money(unit * qty)}`}
           </button>
         </div>
