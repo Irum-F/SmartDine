@@ -20,7 +20,6 @@ const DIETARY = [
 const newGroup = () => ({ name: '', minSelect: 0, maxSelect: 1, options: [{ name: '', price: '' }] });
 
 function toForm(item) {
-  export default function MenuItemEditor({ item, categories, call, onSave, onDelete, onClose, onPhotoChange }) {
   return {
     name: item.name ?? '',
     description: item.description ?? '',
@@ -67,8 +66,7 @@ function toBody(f) {
   };
 }
 
-export default function MenuItemEditor({ item, categories, onSave, onDelete, onClose }) {
-  const [f, setF] = useState(() => toForm(item));
+export default function MenuItemEditor({ item, categories, call, onSave, onDelete, onClose, onPhotoChange }) {  const [f, setF] = useState(() => toForm(item));
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
